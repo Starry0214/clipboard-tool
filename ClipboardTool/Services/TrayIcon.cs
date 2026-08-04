@@ -13,6 +13,7 @@ public sealed class TrayIcon : IDisposable
     public event Action? TogglePause;
     public event Action? ClearHistory;
     public event Action? ShowHelp;
+    public event Action? CheckUpdate;
     public event Action? Exit;
 
     public TrayIcon()
@@ -20,12 +21,14 @@ public sealed class TrayIcon : IDisposable
         var menu = new ContextMenuStrip();
         var miOpen = new ToolStripMenuItem("打开历史记录");
         var miHelp = new ToolStripMenuItem("使用说明");
+        var miUpdate = new ToolStripMenuItem("检查更新");
         var miPause = new ToolStripMenuItem("暂停监听") { CheckOnClick = true };
         var miClear = new ToolStripMenuItem("清空历史");
         var miExit = new ToolStripMenuItem("退出");
 
         miOpen.Click += (_, _) => OpenMain?.Invoke();
         miHelp.Click += (_, _) => ShowHelp?.Invoke();
+        miUpdate.Click += (_, _) => CheckUpdate?.Invoke();
         miPause.CheckedChanged += (_, _) => TogglePause?.Invoke();
         miClear.Click += (_, _) => ClearHistory?.Invoke();
         miExit.Click += (_, _) => Exit?.Invoke();
@@ -33,6 +36,7 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(miOpen);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(miHelp);
+        menu.Items.Add(miUpdate);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(miPause);
         menu.Items.Add(miClear);
@@ -51,7 +55,7 @@ public sealed class TrayIcon : IDisposable
 
     public void SetPaused(bool paused)
     {
-        if (_icon.ContextMenuStrip?.Items[4] is ToolStripMenuItem miPause)
+        if (_icon.ContextMenuStrip?.Items[5] is ToolStripMenuItem miPause)
             miPause.Checked = paused;
     }
 

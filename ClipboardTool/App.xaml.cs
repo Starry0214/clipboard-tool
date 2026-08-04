@@ -89,6 +89,7 @@ public partial class App : Application
         _hotkeys.Pressed += OnHotkeyPressed;
         _tray.OpenMain += OpenMainWindow;
         _tray.ShowHelp += OpenHelp;
+        _tray.CheckUpdate += () => _ = CheckForUpdateAsync(manual: true);
         _tray.TogglePause += OnTogglePause;
         _tray.ClearHistory += OnClearHistory;
         _tray.Exit += OnExitRequested;
@@ -99,6 +100,56 @@ public partial class App : Application
         // 测试钩子：--show-main 直接打开主窗口
         if (e.Args.Contains("--show-main"))
             Dispatcher.BeginInvoke(OpenMainWindow);
+        // 启动 8 秒后自动检查更新（静默，无更新不打扰）
+        var updater = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        updater.Tick += async (_, _) =>
+        {
+            updater.Stop();
+            await CheckForUpdateAsync(manual: false);
+        };
+        updater.Start();
+    }
+
+    /// <summary>检查更新：自动模式静默，手动模式带反馈。有更新时引导下载并重启安装。</summary>
+    private async Task CheckForUpdateAsync(bool manual)
+    {
+        var latest = await Updater.CheckAsync();
+        if (latest is null)
+        {
+            if (manual)
+                MessageBox.Show("检查更新失败：无法连接更新服务器。", "检查更新",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (!Updater.IsNewer(latest))
+        {
+            if (manual)
+                MessageBox.Show($"当前已是最新版本（v{Updater.CurrentVersion}）。", "检查更新",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var answer = MessageBox.Show($"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）。\n是否下载并安装？", "发现更新",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        var newExe = await Updater.DownloadAsync(DataDir);
+        if (newExe is null)
+        {
+            MessageBox.Show("下载更新失败，请检查网络后重试。", "更新失败",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var confirm = MessageBox.Show("更新已下载完成，是否立即重启以完成更新？", "更新就绪",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        Updater.Apply(newExe, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ClipboardTool.exe"));
+        Shutdown();
     }
 
     private void RegisterHotkey()
