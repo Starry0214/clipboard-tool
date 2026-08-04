@@ -243,9 +243,10 @@ public partial class OverlayWindow : Window
     {
         if (HistoryList.SelectedItem is not Entry entry)
             return;
-        // 图片条目始终粘贴原图；文本默认纯文本写入
+        // 列表条目不含原图 BLOB，粘贴前按 id 取完整条目（图片回贴必需）
+        var full = _store.GetById(entry.Id) ?? entry;
         var plain = plainText || _settings.PastePlainText;
-        Paster.Paste(_monitor, entry, plain);
+        Paster.Paste(_monitor, full, plain);
         RequestHide();
     }
 
@@ -313,7 +314,9 @@ public partial class OverlayWindow : Window
     {
         if (ContextEntry(sender) is not Entry entry)
             return;
-        Paster.Paste(_monitor, entry, _settings.PastePlainText);
+        // 列表条目不含原图 BLOB，粘贴前取完整条目
+        var full = _store.GetById(entry.Id) ?? entry;
+        Paster.Paste(_monitor, full, _settings.PastePlainText);
         RequestHide();
     }
 }
