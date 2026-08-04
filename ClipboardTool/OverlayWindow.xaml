@@ -155,7 +155,8 @@
                         <Grid x:Name="Root" MinHeight="32">
                             <!-- 右键快捷菜单：置顶 / 删除 / 预览 / 粘贴 -->
                             <Grid.ContextMenu>
-                                <ContextMenu Style="{StaticResource FluentContextMenu}" Opened="OnContextMenuOpened">
+                                <ContextMenu Style="{StaticResource FluentContextMenu}"
+                                             Opened="OnContextMenuOpened" Closed="OnContextMenuClosed">
                                     <ContextMenu.Resources>
                                         <Style TargetType="MenuItem" BasedOn="{StaticResource FluentMenuItem}"/>
                                         <Style TargetType="Separator" BasedOn="{StaticResource FluentMenuSeparator}"/>

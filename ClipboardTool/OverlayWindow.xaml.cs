@@ -41,23 +41,13 @@ public partial class OverlayWindow : Window
                 AnimateOut();
         };
         SearchBox.TextChanged += (_, _) => Reload();
-        // 双击：图片→大图预览；文本→全文预览；文件→用默认程序打开
-        HistoryList.MouseDoubleClick += (_, _) =>
+        // 单击条目即粘贴（Win+V 行为）；预览/打开请用右键菜单
+        HistoryList.PreviewMouseLeftButtonUp += (_, e) =>
         {
-            if (HistoryList.SelectedItem is not Entry entry)
+            if (!IsInListItem(e.OriginalSource))
                 return;
-            switch (entry.Type)
-            {
-                case "image":
-                    (_preview ??= new ImagePreviewWindow()).ShowImage(_store, entry);
-                    break;
-                case "text":
-                    (_textPreview ??= new TextPreviewWindow()).ShowText(entry);
-                    break;
-                default:
-                    OpenFile(entry.Content);
-                    break;
-            }
+            if (HistoryList.SelectedItem is Entry entry && HistoryList.SelectedIndex >= 0)
+                PasteSelected(plainText: false);
         };
         // 失焦时延迟确认再关闭（避免与热键重按竞争）
         Deactivated += (_, _) =>
@@ -67,6 +57,14 @@ public partial class OverlayWindow : Window
         };
         // 点击列表外部区域 → 等效 Esc 关闭
         _mouseCatcher.OutsideClick += RequestHide;
+    }
+
+    private static bool IsInListItem(object source)
+    {
+        for (DependencyObject? d = source as DependencyObject; d != null; d = VisualTreeHelper.GetParent(d))
+            if (d is System.Windows.Controls.ListBoxItem)
+                return true;
+        return false;
     }
 
     public void ShowAt(Point cursor, List<Entry> items)
@@ -88,14 +86,21 @@ public partial class OverlayWindow : Window
 
         var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point((int)cursor.X, (int)cursor.Y));
         var wa = screen.WorkingArea;
+        // 全物理像素坐标系：cursor/WorkingArea 是物理像素，窗口实际尺寸按当前 DPI 换算成物理像素，
+        // 用 SetWindowPos 直接定位，绕开 WPF Left/Top 的逻辑单位转换（不同 DPI/分辨率下精确）
+        var dpi = VisualTreeHelper.GetDpi(this);
+        double winW = ActualWidth * dpi.DpiScaleX;
+        double winH = ActualHeight * dpi.DpiScaleY;
         // 窗口左上角对齐鼠标位置；超出屏幕边缘时向回校正
         double x = cursor.X, y = cursor.Y;
-        if (x + ActualWidth > wa.Right)
-            x = Math.Max(wa.Left, cursor.X - ActualWidth);
-        if (y + ActualHeight > wa.Bottom)
-            y = Math.Max(wa.Top, cursor.Y - ActualHeight);
-        Left = x;
-        Top = y;
+        if (x + winW > wa.Right)
+            x = Math.Max(wa.Left, cursor.X - winW);
+        if (y + winH > wa.Bottom)
+            y = Math.Max(wa.Top, cursor.Y - winH);
+        NativeMethods.SetWindowPos(new WindowInteropHelper(this).Handle, IntPtr.Zero,
+            (int)x, (int)y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        Left = x / dpi.DpiScaleX;
+        Top = y / dpi.DpiScaleY;
 
         Activate();
         Keyboard.Focus(SearchBox);
@@ -253,9 +258,21 @@ public partial class OverlayWindow : Window
 
     private void OnContextMenuOpened(object sender, RoutedEventArgs e)
     {
+        // 菜单打开期间暂停失焦关闭，否则菜单会随列表一起消失导致点击无效
+        _closeTimer.Stop();
         if (sender is ContextMenu cm && cm.PlacementTarget is FrameworkElement fe
             && fe.DataContext is Entry entry && cm.Items.Count > 0 && cm.Items[0] is MenuItem pin)
             pin.Header = entry.Pinned ? "取消置顶" : "置顶";
+    }
+
+    private void OnContextMenuClosed(object sender, RoutedEventArgs e)
+    {
+        // 菜单关闭后恢复失焦关闭逻辑
+        if (IsVisible && !IsActive)
+        {
+            _closeTimer.Stop();
+            _closeTimer.Start();
+        }
     }
 
     private void OnPin(object sender, RoutedEventArgs e)
