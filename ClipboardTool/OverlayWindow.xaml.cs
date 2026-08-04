@@ -131,3 +131,13 @@ public sealed class ThumbnailConverter : System.Windows.Data.IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>字符串长度 → Visibility：非空显示，空隐藏。</summary>
+public sealed class StringToVisibilityConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is string s && s.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}

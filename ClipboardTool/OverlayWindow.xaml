@@ -16,45 +16,62 @@
     <Window.Resources>
         <local:ThumbnailConverter x:Key="ThumbConverter"/>
     </Window.Resources>
-    <Border CornerRadius="10"
-            Background="#F7F8FA"
-            BorderBrush="#C9CDD4"
+    <Border CornerRadius="12"
+            Background="White"
+            BorderBrush="#D0D5DD"
             BorderThickness="1"
             Margin="10"
-            Padding="10">
+            Padding="0">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="2" Opacity="0.12" Color="#000000"/>
+        </Border.Effect>
         <DockPanel>
+            <!-- 搜索框 -->
             <Border DockPanel.Dock="Top"
-                    Background="#EDEFF2"
-                    CornerRadius="6"
-                    Padding="8,4"
-                    Margin="0,0,0,8">
-                <TextBox x:Name="SearchBox"
-                         BorderThickness="0"
-                         Background="Transparent"
-                         FontSize="13"
-                         Foreground="#333333">
-                    <TextBox.Style>
-                        <Style TargetType="TextBox">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="TextBox">
-                                        <ScrollViewer x:Name="PART_ContentHost"/>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </TextBox.Style>
-                </TextBox>
+                    Background="#F7F8FA"
+                    CornerRadius="12,12,0,0"
+                    Padding="12,8">
+                <Grid>
+                    <TextBlock Text="🔍 搜索历史"
+                               FontSize="13"
+                               Foreground="#888888"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding Text.Length, ElementName=SearchBox, Converter={StaticResource StringToVisibility}}"/>
+                    <TextBox x:Name="SearchBox"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             FontSize="13"
+                             Foreground="#1A1A1A"
+                             CaretBrush="{StaticResource AccentBrush}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <ScrollViewer x:Name="PART_ContentHost"/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </Grid>
             </Border>
+
+            <!-- 分隔线 -->
+            <Separator DockPanel.Dock="Top" Background="#E8E8E8" Margin="12,0"/>
+
+            <!-- 历史列表 -->
             <ListBox x:Name="HistoryList"
                      BorderThickness="0"
                      Background="Transparent"
+                     Padding="6,6"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"
                      VirtualizingPanel.VirtualizationMode="Recycling">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
-                        <Setter Property="Padding" Value="8,6"/>
+                        <Setter Property="Padding" Value="10,8"/>
                         <Setter Property="Margin" Value="0,1"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                         <Setter Property="Cursor" Value="Hand"/>
@@ -62,17 +79,17 @@
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
                                     <Border x:Name="Bd"
-                                            Background="{TemplateBinding Background}"
-                                            CornerRadius="6"
+                                            Background="Transparent"
+                                            CornerRadius="8"
                                             Padding="{TemplateBinding Padding}">
                                         <ContentPresenter/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#DCE9F7"/>
+                                            <Setter TargetName="Bd" Property="Background" Value="#E8F0FE"/>
                                         </Trigger>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#E8EEF5"/>
+                                            <Setter TargetName="Bd" Property="Background" Value="#F5F7FA"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -82,34 +99,49 @@
                 </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid MinHeight="30">
+                        <Grid MinHeight="32">
+                            <!-- 图片条目 -->
                             <StackPanel x:Name="ImagePanel" Orientation="Horizontal" Visibility="Collapsed">
-                                <Image Source="{Binding Thumb, Converter={StaticResource ThumbConverter}}"
-                                       MaxWidth="180" MaxHeight="90"
-                                       Stretch="Uniform"
-                                       SnapsToDevicePixels="True"/>
+                                <Border CornerRadius="6" ClipToBounds="True" BorderBrush="#E8E8E8" BorderThickness="1">
+                                    <Image Source="{Binding Thumb, Converter={StaticResource ThumbConverter}}"
+                                           MaxWidth="180" MaxHeight="90"
+                                           Stretch="Uniform"
+                                           SnapsToDevicePixels="True"/>
+                                </Border>
                             </StackPanel>
+                            <!-- 文件条目 -->
                             <StackPanel x:Name="FilePanel" Orientation="Horizontal" Visibility="Collapsed">
-                                <TextBlock FontFamily="Segoe MDL2 Assets"
-                                           Text="&#xE8B7;"
-                                           FontSize="15"
-                                           Foreground="#60666E"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
+                                <Border Background="#E8F0FE" CornerRadius="6" Width="32" Height="32"
+                                        Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                                               Text="&#xE8B7;"
+                                               FontSize="15"
+                                               Foreground="#0078D4"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
                                 <TextBlock Text="{Binding Content}"
                                            TextTrimming="CharacterEllipsis"
-                                           MaxWidth="340"
+                                           MaxWidth="320"
                                            FontSize="13"
-                                           Foreground="#333333"
+                                           Foreground="#1A1A1A"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
+                            <!-- 文本条目 -->
                             <TextBlock x:Name="TextLine"
                                        Text="{Binding Content}"
                                        TextTrimming="CharacterEllipsis"
                                        MaxWidth="370"
                                        FontSize="13"
-                                       Foreground="#333333"
+                                       Foreground="#1A1A1A"
                                        VerticalAlignment="Center"/>
+                            <!-- 置顶角标 -->
+                            <Border x:Name="PinBadge" Visibility="Collapsed"
+                                    Background="#E8F0FE" CornerRadius="4" Padding="4,2"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Margin="0,0,4,0">
+                                <TextBlock Text="置顶" FontSize="10" Foreground="#0078D4" FontWeight="SemiBold"/>
+                            </Border>
                         </Grid>
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding Type}" Value="image">
@@ -119,6 +151,9 @@
                             <DataTrigger Binding="{Binding Type}" Value="file">
                                 <Setter TargetName="FilePanel" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Pinned}" Value="True">
+                                <Setter TargetName="PinBadge" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>

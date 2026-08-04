@@ -18,6 +18,7 @@ public partial class App : Application
     private MessageWindow _messageWindow = null!;
     private OverlayWindow _overlay = null!;
     private MainWindow? _main;
+    private HelpWindow? _help;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -49,6 +50,7 @@ public partial class App : Application
         _overlay = new OverlayWindow(_store, _monitor, _settings);
         _hotkeys.Pressed += OnHotkeyPressed;
         _tray.OpenMain += OpenMainWindow;
+        _tray.ShowHelp += OpenHelp;
         _tray.TogglePause += OnTogglePause;
         _tray.ClearHistory += OnClearHistory;
         _tray.Exit += OnExitRequested;
@@ -93,6 +95,12 @@ public partial class App : Application
             _main.Show();
         _main.Refresh();
         _main.Activate();
+    }
+
+    private void OpenHelp()
+    {
+        _help ??= new HelpWindow();
+        _help.Open();
     }
 
     private void OnTogglePause()
