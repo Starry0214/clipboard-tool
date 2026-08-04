@@ -58,6 +58,7 @@ internal static class NativeMethods
 
     internal const uint CF_UNICODETEXT = 13;
     internal const uint CF_HDROP = 15;
+    internal const uint CF_DIB = 8;
 
     // ---- 常量 ----
     internal const int WM_CLIPBOARDUPDATE = 0x031D;

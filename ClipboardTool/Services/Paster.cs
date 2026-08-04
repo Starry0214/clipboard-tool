@@ -1,14 +1,15 @@
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows;
 using System.Windows.Media.Imaging;
 
 namespace ClipboardTool;
 
 /// <summary>
 /// 把条目写入剪贴板并向目标窗口模拟 Ctrl+V 完成粘贴。
-/// 文本/文件走 Win32 原生剪贴板（后台线程，UI 零阻塞、失败即释放）；
-/// 图片走 UI 线程 WPF 剪贴板（OLE 就绪，带重试）。
+/// 全部在后台线程执行（UI 零阻塞），统一走 Win32 原生剪贴板（OpenClipboard/SetClipboardData，
+/// 同步复制、失败即释放，无 OLE 滞留问题）：文本=CF_UNICODETEXT、文件=CF_HDROP、图片=CF_DIB。
 /// </summary>
 public static class Paster
 {
@@ -20,25 +21,6 @@ public static class Paster
         monitor.SuppressNext = true;
         var target = TargetWindow;
 
-        if (entry.Type == "image" && entry.Image is not null)
-        {
-            // 图片：UI 线程 WPF 写入（OLE/消息泵就绪最可靠）
-            NativeMethods.SetForegroundWindow(target);
-            Thread.Sleep(30);
-            try
-            {
-                WriteClipboard(() => System.Windows.Clipboard.SetImage(ClipboardMonitor.DecodePng(entry.Image)));
-            }
-            catch (Exception)
-            {
-                monitor.SuppressNext = false;
-                return;
-            }
-            SendCtrlVAsync();
-            return;
-        }
-
-        // 文本/文件：后台线程 Win32 写入（无需 OLE/消息泵，UI 零阻塞）
         var worker = new Thread(() =>
         {
             try
@@ -60,7 +42,7 @@ public static class Paster
         worker.Start();
     }
 
-    // ---- Win32 剪贴板（文本/文件） ----
+    // ---- Win32 剪贴板写入（带重试） ----
 
     private static void WriteClipboardWin32(Entry entry)
     {
@@ -69,7 +51,9 @@ public static class Paster
         {
             try
             {
-                if (entry.Type == "file")
+                if (entry.Type == "image" && entry.Image is not null)
+                    SetClipboardImage(entry.Image);
+                else if (entry.Type == "file")
                     SetClipboardFiles(entry.Content);
                 else
                     SetClipboardText(entry.Content);
@@ -137,45 +121,84 @@ public static class Paster
         }
     }
 
-    // ---- WPF 剪贴板（图片）带重试 ----
-
-    private static void WriteClipboard(Action write)
+    private static void SetClipboardImage(byte[] png)
     {
-        Exception? last = null;
-        for (var i = 0; i < 5; i++)
+        using var bmp = BitmapFromPng(png);
+        var h = ConvertToDib(bmp);
+        try
         {
+            if (!NativeMethods.OpenClipboard(IntPtr.Zero))
+                throw new InvalidOperationException("OpenClipboard 失败");
             try
             {
-                write();
-                return;
+                NativeMethods.EmptyClipboard();
+                if (NativeMethods.SetClipboardData(NativeMethods.CF_DIB, h) == IntPtr.Zero)
+                    throw new InvalidOperationException("SetClipboardData 失败");
+                h = IntPtr.Zero; // 系统接管内存
             }
-            catch (Exception ex)
+            finally
             {
-                last = ex;
-                Thread.Sleep(100);
+                NativeMethods.CloseClipboard();
             }
         }
-        throw last ?? new InvalidOperationException("剪贴板写入失败");
+        finally
+        {
+            if (h != IntPtr.Zero)
+                Marshal.FreeHGlobal(h);
+        }
+    }
+
+    /// <summary>PNG BLOB → System.Drawing.Bitmap。</summary>
+    private static Bitmap BitmapFromPng(byte[] png)
+    {
+        using var ms = new MemoryStream(png);
+        var decoder = new PngBitmapDecoder(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var src = decoder.Frames[0];
+
+        using var outMs = new MemoryStream();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(src));
+        encoder.Save(outMs);
+        outMs.Position = 0;
+        return new Bitmap(outMs);
+    }
+
+    /// <summary>Bitmap → 32bpp DIB（BITMAPINFOHEADER + 自底向上像素数据）。返回的句柄由调用方管理。</summary>
+    private static IntPtr ConvertToDib(Bitmap bmp)
+    {
+        const int headerSize = 40; // BITMAPINFOHEADER
+        var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var stride = Math.Abs(bmpData.Stride);
+            var pixelBytes = stride * bmp.Height;
+            var h = Marshal.AllocHGlobal(headerSize + pixelBytes);
+
+            Marshal.WriteInt32(h, 0, headerSize);      // biSize
+            Marshal.WriteInt32(h, 4, bmp.Width);       // biWidth
+            Marshal.WriteInt32(h, 8, bmp.Height);      // biHeight（正=自底向上）
+            Marshal.WriteInt16(h, 12, 1);              // biPlanes
+            Marshal.WriteInt16(h, 14, 32);             // biBitCount
+            Marshal.WriteInt32(h, 16, 0);              // biCompression = BI_RGB
+            Marshal.WriteInt32(h, 20, pixelBytes);     // biSizeImage
+
+            // 逐行复制并垂直翻转（DIB 自底向上）
+            var rowBuf = new byte[stride];
+            for (var y = 0; y < bmp.Height; y++)
+            {
+                Marshal.Copy(bmpData.Scan0 + y * bmpData.Stride, rowBuf, 0, stride);
+                Marshal.Copy(rowBuf, 0, h + headerSize + (bmp.Height - 1 - y) * stride, stride);
+            }
+            return h;
+        }
+        finally
+        {
+            bmp.UnlockBits(bmpData);
+        }
     }
 
     // ---- 模拟 Ctrl+V ----
-
-    private static void SendCtrlVAsync()
-    {
-        var worker = new Thread(() =>
-        {
-            try
-            {
-                Thread.Sleep(60);
-                SendCtrlV();
-            }
-            catch (Exception)
-            {
-            }
-        });
-        worker.IsBackground = true;
-        worker.Start();
-    }
 
     private static void SendCtrlV()
     {
