@@ -114,26 +114,27 @@ public sealed class ClipboardStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>查询历史：置顶优先、时间倒序。列表查询不含原图 BLOB（仅缩略图）。</summary>
-    public List<Entry> Query(string? search = null)
+    /// <summary>查询历史：置顶优先、时间倒序。列表查询不含原图 BLOB（仅缩略图）。type 为空表示全部类型。</summary>
+    public List<Entry> Query(string? search = null, string? type = null)
     {
         var list = new List<Entry>();
         using var cmd = _conn.CreateCommand();
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            cmd.CommandText = "SELECT id, type, content, thumb, pinned, created_at FROM entries ORDER BY pinned DESC, created_at DESC";
-        }
-        else
+        var where = new List<string>();
+        if (!string.IsNullOrWhiteSpace(search))
         {
             // 图片条目不参与关键词搜索（规格 S2）；转义 LIKE 通配符
             var kw = search!.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-            cmd.CommandText = """
-                SELECT id, type, content, thumb, pinned, created_at FROM entries
-                WHERE type != 'image' AND content LIKE $kw ESCAPE '\'
-                ORDER BY pinned DESC, created_at DESC
-                """;
+            where.Add("type != 'image' AND content LIKE $kw ESCAPE '\\'");
             cmd.Parameters.AddWithValue("$kw", $"%{kw}%");
         }
+        if (!string.IsNullOrEmpty(type))
+        {
+            where.Add("type = $type");
+            cmd.Parameters.AddWithValue("$type", type);
+        }
+        cmd.CommandText = where.Count == 0
+            ? "SELECT id, type, content, thumb, pinned, created_at FROM entries ORDER BY pinned DESC, created_at DESC"
+            : $"SELECT id, type, content, thumb, pinned, created_at FROM entries WHERE {string.Join(" AND ", where)} ORDER BY pinned DESC, created_at DESC";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {

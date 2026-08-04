@@ -18,18 +18,35 @@ public partial class SettingsWindow : Window
         AutoStartCheck.IsChecked = settings.AutoStart;
         PlainCheck.IsChecked = settings.PastePlainText;
 
+        WinVCheck.IsChecked = settings.UseWinV;
+        WinVCheck.Checked += (_, _) => UpdateWinVState();
+        WinVCheck.Unchecked += (_, _) => UpdateWinVState();
+        UpdateWinVState();
+
         HotkeyBox.PreviewKeyDown += OnHotkeyKeyDown;
         HotkeyBox.GotKeyboardFocus += (_, _) => HotkeyBox.SelectAll();
+    }
+
+    /// <summary>Win+V 覆盖模式：禁用自定义热键输入框并显示提示。</summary>
+    private void UpdateWinVState()
+    {
+        var on = WinVCheck.IsChecked == true;
+        HotkeyBox.IsEnabled = !on;
+        HotkeyBox.Opacity = on ? 0.5 : 1;
+        WinVHintBox.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnHotkeyKeyDown(object sender, KeyEventArgs e)
     {
         e.Handled = true;
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift)
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
+            or Key.LWin or Key.RWin)
             return;
 
         var parts = new List<string>();
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows))
+            parts.Add("Win");
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             parts.Add("Ctrl");
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
@@ -60,16 +77,21 @@ public partial class SettingsWindow : Window
 
     private void OnOk(object sender, RoutedEventArgs e)
     {
-        // 校验热键可解析
-        try
+        var useWinV = WinVCheck.IsChecked == true;
+
+        // Win+V 覆盖模式下无需自定义热键；否则校验热键可解析
+        if (!useWinV)
         {
-            Settings.ParseHotkey(HotkeyBox.Text);
-        }
-        catch (FormatException)
-        {
-            MessageBox.Show(this, "热键格式无效，请点击输入框后按下新的组合键。", "设置",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
+            try
+            {
+                Settings.ParseHotkey(HotkeyBox.Text);
+            }
+            catch (FormatException)
+            {
+                MessageBox.Show(this, "热键格式无效，请点击输入框后按下新的组合键。", "设置",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
         }
 
         if (!int.TryParse(MaxBox.Text, out var max) || max < 10 || max > 10000)
@@ -79,6 +101,7 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        _settings.UseWinV = useWinV;
         _settings.HotkeyText = HotkeyBox.Text;
         _settings.MaxEntries = max;
         _settings.AutoStart = AutoStartCheck.IsChecked == true;

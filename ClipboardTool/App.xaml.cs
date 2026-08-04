@@ -14,6 +14,7 @@ public partial class App : Application
     private Settings _settings = null!;
     private ClipboardMonitor _monitor = null!;
     private HotkeyManager _hotkeys = null!;
+    private KeyboardHook _keyboardHook = null!;
     private TrayIcon _tray = null!;
     private MessageWindow _messageWindow = null!;
     private OverlayWindow _overlay = null!;
@@ -37,6 +38,9 @@ public partial class App : Application
         _store = new ClipboardStore(dataDir) { MaxEntries = _settings.MaxEntries };
         _monitor = new ClipboardMonitor(_store);
         _hotkeys = new HotkeyManager();
+        _keyboardHook = new KeyboardHook();
+        _keyboardHook.Start();
+        _keyboardHook.HotkeyPressed += OnHotkeyPressed;
         _tray = new TrayIcon();
 
         // 常驻隐藏窗口承载剪贴板监听与全局热键消息
@@ -46,6 +50,19 @@ public partial class App : Application
         _monitor.Start(_messageWindow);
         RegisterHotkey();
         _settings.ApplyAutoStart();
+
+        // 生成窗口图标并放入全局资源（供所有窗口绑定）
+        using (var iconBmp = TrayIcon.CreateIconBitmap(256))
+        {
+            var hIcon = iconBmp.GetHicon();
+            var icon = System.Drawing.Icon.FromHandle(hIcon);
+            var imageSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                icon.Handle,
+                System.Windows.Int32Rect.Empty,
+                System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+            imageSource.Freeze();
+            Current.Resources["AppIcon"] = imageSource;
+        }
 
         _overlay = new OverlayWindow(_store, _monitor, _settings);
         _hotkeys.Pressed += OnHotkeyPressed;
@@ -65,9 +82,27 @@ public partial class App : Application
 
     private void RegisterHotkey()
     {
+        if (_settings.UseWinV)
+        {
+            // Win+V 覆盖模式：低级钩子拦截，系统剪贴板历史被接管
+            _hotkeys.Unregister();
+            _keyboardHook.Configure(NativeMethods.MOD_WIN | NativeMethods.MOD_NOREPEAT, 0x56);
+            return;
+        }
+
+        var (mods, vk) = Settings.ParseHotkey(_settings.HotkeyText);
+
+        if ((mods & NativeMethods.MOD_WIN) != 0)
+        {
+            // Win 组合键（如 Win+V）被系统硬绑定，RegisterHotKey 会失败 → 用低级钩子直接拦截
+            _hotkeys.Unregister();
+            _keyboardHook.Configure(mods, vk);
+            return;
+        }
+
+        _keyboardHook.Configure(0, 0);
         try
         {
-            var (mods, vk) = Settings.ParseHotkey(_settings.HotkeyText);
             _hotkeys.Register(_messageWindow, mods, vk);
         }
         catch (Exception ex)
@@ -81,7 +116,7 @@ public partial class App : Application
     {
         if (_overlay.IsVisible)
         {
-            _overlay.Hide();
+            _overlay.RequestHide();
             return;
         }
         NativeMethods.GetCursorPos(out var pt);
@@ -137,6 +172,7 @@ public partial class App : Application
         _tray?.Dispose();
         _monitor?.Stop();
         _hotkeys?.Unregister();
+        _keyboardHook?.Dispose();
         _store?.Dispose();
         base.OnExit(e);
     }

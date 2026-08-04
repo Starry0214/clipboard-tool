@@ -7,6 +7,7 @@ namespace ClipboardTool;
 public sealed class Settings
 {
     public string HotkeyText { get; set; } = "Ctrl+Alt+V";
+    public bool UseWinV { get; set; }
     public int MaxEntries { get; set; } = 500;
     public bool AutoStart { get; set; }
     public bool PastePlainText { get; set; }
@@ -20,7 +21,12 @@ public sealed class Settings
         try
         {
             if (File.Exists(path))
+            {
                 s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path)) ?? s;
+                // 兼容旧配置：热键已是 Win+V 时视为启用 Win+V 覆盖
+                if (!s.UseWinV && string.Equals(s.HotkeyText, "Win+V", StringComparison.OrdinalIgnoreCase))
+                    s.UseWinV = true;
+            }
         }
         catch (JsonException)
         {
@@ -54,6 +60,7 @@ public sealed class Settings
                 case "CTRL" or "CONTROL": mods |= NativeMethods.MOD_CONTROL; break;
                 case "ALT": mods |= NativeMethods.MOD_ALT; break;
                 case "SHIFT": mods |= NativeMethods.MOD_SHIFT; break;
+                case "WIN" or "WINDOWS": mods |= NativeMethods.MOD_WIN; break;
                 default:
                     if (part.Length == 1 && char.IsLetterOrDigit(part[0]))
                         vk = part[0];

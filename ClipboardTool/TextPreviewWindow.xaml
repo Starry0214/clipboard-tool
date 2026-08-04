@@ -1,0 +1,45 @@
+<Window x:Class="ClipboardTool.TextPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="文本预览"
+        Width="640" Height="480"
+        MinWidth="400" MinHeight="280"
+        WindowStartupLocation="CenterScreen"
+        Background="#F3F3F3"
+        Icon="{StaticResource AppIcon}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部工具栏 -->
+        <Border Grid.Row="0" Style="{StaticResource CardBorder}" Margin="0,0,0,12" Padding="14,10">
+            <DockPanel>
+                <TextBlock x:Name="TitleText" DockPanel.Dock="Left"
+                           FontSize="13" FontWeight="SemiBold" Foreground="#1A1A1A"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <Button DockPanel.Dock="Right" x:Name="BtnCopy" Content="复制全部"
+                        Style="{StaticResource FluentButtonSecondary}" Padding="12,4"
+                        FontSize="12" HorizontalAlignment="Right" Click="OnCopyAll"/>
+            </DockPanel>
+        </Border>
+
+        <!-- 内容区（只读可选中） -->
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="6">
+            <TextBox x:Name="ContentBox"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     FontFamily="Consolas, Microsoft YaHei UI"
+                     FontSize="13"
+                     Foreground="#1A1A1A"
+                     Padding="12"
+                     SelectionBrush="#B3D7F2"
+                     CaretBrush="#0078D4"/>
+        </Border>
+    </Grid>
+</Window>

@@ -63,39 +63,57 @@ public sealed class TrayIcon : IDisposable
 
     private static Icon CreateIcon()
     {
-        using var bmp = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.Clear(Color.Transparent);
-
-            var accent = Color.FromArgb(0, 120, 215);
-            var dark = Color.FromArgb(0, 100, 180);
-
-            // 顶部蓝色夹子（圆角矩形）
-            using var clipBrush = new SolidBrush(accent);
-            g.FillRounded(clipBrush, new Rectangle(10, 4, 12, 6), 2);
-            // 夹子内白色镂空
-            using var clipHole = new SolidBrush(Color.White);
-            g.FillRounded(clipHole, new Rectangle(13, 5, 6, 4), 1);
-
-            // 白色纸张（带浅灰边框）
-            using var paperBrush = new SolidBrush(Color.White);
-            using var borderPen = new Pen(Color.FromArgb(208, 213, 221), 0.8f);
-            g.FillRounded(paperBrush, new Rectangle(6, 8, 20, 20), 3);
-            g.DrawRounded(borderPen, new Rectangle(6, 8, 20, 20), 3);
-
-            // 蓝色内容行（三条横线，逐渐变短）
-            using var lineBrush = new SolidBrush(Color.FromArgb(0, 120, 215, 180));
-            using var lineBrush2 = new SolidBrush(Color.FromArgb(0, 120, 215, 120));
-            using var lineBrush3 = new SolidBrush(Color.FromArgb(0, 120, 215, 80));
-            g.FillRounded(lineBrush, new Rectangle(10, 14, 14, 2), 1);
-            g.FillRounded(lineBrush2, new Rectangle(10, 18, 10, 2), 1);
-            g.FillRounded(lineBrush3, new Rectangle(10, 22, 12, 2), 1);
-        }
+        using var bmp = CreateIconBitmap(32);
         var hIcon = bmp.GetHicon();
         return Icon.FromHandle(hIcon);
+    }
+
+    /// <summary>生成指定尺寸的应用图标 Bitmap（用于托盘和窗口图标）。</summary>
+    internal static Bitmap CreateIconBitmap(int size)
+    {
+        var bmp = new Bitmap(size, size);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.Clear(Color.Transparent);
+
+        var s = size / 32f;
+        var accent = Color.FromArgb(0, 120, 215);
+
+        // 顶部蓝色夹子
+        using var clipBrush = new SolidBrush(accent);
+        g.FillRounded(clipBrush, new Rectangle((int)(10*s), (int)(4*s), (int)(12*s), (int)(6*s)), Math.Max(1, (int)(2*s)));
+        using var clipHole = new SolidBrush(Color.White);
+        g.FillRounded(clipHole, new Rectangle((int)(13*s), (int)(5*s), (int)(6*s), (int)(4*s)), Math.Max(1, (int)(1*s)));
+
+        // 白色纸张
+        using var paperBrush = new SolidBrush(Color.White);
+        using var borderPen = new Pen(Color.FromArgb(208, 213, 221), Math.Max(0.5f, 0.8f * s));
+        g.FillRounded(paperBrush, new Rectangle((int)(6*s), (int)(8*s), (int)(20*s), (int)(20*s)), Math.Max(1, (int)(3*s)));
+        g.DrawRounded(borderPen, new Rectangle((int)(6*s), (int)(8*s), (int)(20*s), (int)(20*s)), Math.Max(1, (int)(3*s)));
+
+        // CV 字母组合（重叠，纸张中央）
+        using var cFont = new Font("Segoe UI", Math.Max(8, size * 0.38f), FontStyle.Bold, GraphicsUnit.Pixel);
+        using var vFont = new Font("Segoe UI", Math.Max(10, size * 0.44f), FontStyle.Bold, GraphicsUnit.Pixel);
+        using var cBrush = new SolidBrush(Color.FromArgb(140, 180, 210)); // 浅灰蓝
+        using var vBrush = new SolidBrush(accent); // 标准蓝
+
+        var cFmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        var vFmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+
+        // C 在左（浅蓝灰），V 在右（标准蓝，重叠）
+        g.DrawString("C", cFont, cBrush,
+            new RectangleF((int)(9*s), (int)(13*s), (int)(11*s), (int)(12*s)), cFmt);
+        g.DrawString("V", vFont, vBrush,
+            new RectangleF((int)(13*s), (int)(14*s), (int)(11*s), (int)(12*s)), vFmt);
+
+        // 蓝色内容行（装饰线）
+        using var lineBrush = new SolidBrush(Color.FromArgb(0, 120, 215, 50));
+        g.FillRounded(lineBrush, new Rectangle((int)(10*s), (int)(11*s), (int)(14*s), Math.Max(1, (int)(1.5*s))), Math.Max(1, (int)(0.75*s)));
+        using var lineBrush2 = new SolidBrush(Color.FromArgb(0, 120, 215, 35));
+        g.FillRounded(lineBrush2, new Rectangle((int)(10*s), (int)(26*s), (int)(10*s), Math.Max(1, (int)(1.5*s))), Math.Max(1, (int)(0.75*s)));
+
+        return bmp;
     }
 }
 

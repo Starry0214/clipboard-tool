@@ -4,10 +4,10 @@
   <rect x="104" y="36" width="48" height="24" rx="8" fill="white"/>
   <!-- 白色纸张 -->
   <rect x="40" y="64" width="176" height="168" rx="16" fill="white" stroke="#D0D5DD" stroke-width="3"/>
-  <!-- 蓝色内容行 -->
-  <rect x="72" y="104" width="112" height="12" rx="6" fill="#0078D4" opacity="0.85"/>
-  <rect x="72" y="132" width="80" height="12" rx="6" fill="#0078D4" opacity="0.65"/>
-  <rect x="72" y="160" width="96" height="12" rx="6" fill="#0078D4" opacity="0.45"/>
-  <!-- 圆角阴影效果 -->
-  <rect x="40" y="64" width="176" height="168" rx="16" fill="none" stroke="#0078D4" stroke-width="2" opacity="0.15"/>
+  <!-- CV 字母组合（重叠） -->
+  <text x="100" y="172" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="72" fill="#0078D4" opacity="0.35">C</text>
+  <text x="118" y="176" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="80" fill="#0078D4">V</text>
+  <!-- 蓝色内容行（装饰） -->
+  <rect x="72" y="112" width="112" height="8" rx="4" fill="#0078D4" opacity="0.2"/>
+  <rect x="72" y="132" width="80" height="8" rx="4" fill="#0078D4" opacity="0.15"/>
 </svg>

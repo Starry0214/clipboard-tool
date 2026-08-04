@@ -2,171 +2,228 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="使用说明 — 剪贴板工具"
-        Width="580" Height="480"
+        Width="600" Height="500"
         WindowStartupLocation="CenterOwner"
-        Background="#F3F3F3">
+        Background="#F3F3F3"
+        Icon="{StaticResource AppIcon}">
+
+    <Window.Resources>
+        <!-- Fluent TabItem 样式 -->
+        <Style x:Key="FluentTabItem" TargetType="TabItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#666666"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <StackPanel HorizontalAlignment="Center">
+                                <ContentPresenter x:Name="Content" ContentSource="Header" HorizontalAlignment="Center"/>
+                                <Border x:Name="Indicator" Height="2" CornerRadius="1" Margin="0,6,0,0"
+                                        Background="{StaticResource AccentBrush}" HorizontalAlignment="Stretch"
+                                        Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#333333"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="#0078D4"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter TargetName="Indicator" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Fluent TabControl 样式（隐藏默认 header panel） -->
+        <Style x:Key="FluentTabControl" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="16">
-        <TabControl FontSize="13" Background="Transparent" BorderThickness="0">
-            <!-- 功能概览 -->
-            <TabItem Header="功能概览" Padding="8,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="剪贴板工具 — 功能概览" FontSize="18" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,12"/>
-                        <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="24" Margin="0,0,0,8">
-                            本工具替代 Windows 自带 Win+V 剪贴板历史，提供本地、轻量、稳定的剪贴板记录管理。
-                        </TextBlock>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,8" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="核心功能" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,6"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    • 事件驱动剪贴板监听（非轮询，系统级 AddClipboardFormatListener）&#x0a;• 文本、图片（缩略图+原图）、文件路径三类历史记录&#x0a;• 按内容哈希去重（重复复制只记一条）&#x0a;• SQLite 持久化（重启后历史保留）&#x0a;• 可配置条数上限（默认 500，置顶条目不被裁剪）&#x0a;• 内容置顶（常用条目钉在列表最前）
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,8" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="交互方式" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,6"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    • 全局热键弹出悬浮历史列表（默认 Ctrl+Alt+V，光标处弹出）&#x0a;• 列表内搜索过滤（即时过滤，图片不参与搜索）&#x0a;• 键盘操作：↑↓ 选择、Enter 粘贴、Ctrl+V 纯文本粘贴、Esc 关闭&#x0a;• 粘贴时写回剪贴板并模拟 Ctrl+V 到原前台窗口&#x0a;• 系统托盘常驻（右键菜单快捷操作）
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="管理功能" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,6"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    • 主窗口全量浏览、搜索、置顶、删除、清空&#x0a;• 设置：热键改绑、条数上限、开机自启、默认纯文本粘贴&#x0a;• 单实例保护（重复启动被拒并提示）
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-            <!-- 快捷键 -->
-            <TabItem Header="快捷键" Padding="8,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="快捷键一览" FontSize="18" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,12"/>
-                        <Border Background="White" CornerRadius="8" Padding="16" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <DataGrid AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="None"
-                                      HeadersVisibility="None" Background="Transparent" BorderThickness="0"
-                                      RowBackground="Transparent" AlternatingRowBackground="#FAFAFA">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="组合键" Binding="{Binding Key}" Width="120">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="FontWeight" Value="SemiBold"/>
-                                                <Setter Property="Foreground" Value="#1A1A1A"/>
-                                                <Setter Property="FontFamily" Value="Consolas"/>
-                                                <Setter Property="Margin" Value="0,6"/>
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                    </DataGridTextColumn>
-                                    <DataGridTextColumn Header="功能" Binding="{Binding Desc}" Width="*">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="#444"/>
-                                                <Setter Property="Margin" Value="0,6"/>
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                    </DataGridTextColumn>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+        <!-- 标题区 -->
+        <Border Grid.Row="0" Style="{StaticResource CardBorder}" Margin="0,0,0,12" Padding="20,16">
+            <StackPanel>
+                <TextBlock Text="使用说明" FontSize="22" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,4"/>
+                <TextBlock Text="剪贴板工具功能介绍与操作指南" FontSize="13" Foreground="#666666"/>
+            </StackPanel>
+        </Border>
 
-            <!-- 设置说明 -->
-            <TabItem Header="设置说明" Padding="8,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="设置项说明" FontSize="18" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,12"/>
-                        <Border Background="White" CornerRadius="8" Padding="16" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="热键设置" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    格式：修饰键+主键，如 Ctrl+Alt+V、Ctrl+Shift+V。支持 Ctrl、Alt、Shift 修饰键，主键支持 A-Z 字母、0-9 数字、F1-F24 功能键。默认 Ctrl+Alt+V。
+        <!-- Tab 区域 -->
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="0">
+            <TabControl Style="{StaticResource FluentTabControl}" Padding="0">
+                <!-- Tab Header 用自定义样式 -->
+                <TabControl.Resources>
+                    <Style TargetType="TabItem" BasedOn="{StaticResource FluentTabItem}"/>
+                </TabControl.Resources>
+
+                <!-- 功能概览 -->
+                <TabItem Header="功能概览" Padding="16,10">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,16">
+                        <StackPanel>
+                            <TextBlock Text="核心功能" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,8"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="24" FontSize="13">
+• 事件驱动剪贴板监听（非轮询，系统级 AddClipboardFormatListener）&#x0a;• 文本、图片（缩略图+原图）、文件路径三类历史记录&#x0a;• 按内容哈希去重（重复复制只记一条）&#x0a;• SQLite 持久化（重启后历史保留）&#x0a;• 可配置条数上限（默认 500，置顶条目不被裁剪）&#x0a;• 内容置顶（常用条目钉在列表最前）</TextBlock>
+                            </Border>
+
+                            <TextBlock Text="交互方式" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,8"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="24" FontSize="13">
+• 全局热键弹出悬浮历史列表（默认 Ctrl+Alt+V）&#x0a;• 列表内搜索过滤（即时过滤，图片不参与搜索）&#x0a;• 键盘操作：↑↓ 选择、Enter 粘贴、Ctrl+V 纯文本粘贴、Esc 关闭&#x0a;• 粘贴时写回剪贴板并模拟 Ctrl+V 到原前台窗口&#x0a;• 系统托盘常驻（右键菜单快捷操作）</TextBlock>
+                            </Border>
+
+                            <TextBlock Text="管理功能" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,8"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="24" FontSize="13">
+• 主窗口全量浏览、搜索、置顶、删除、清空&#x0a;• 设置：热键改绑、条数上限、开机自启、默认纯文本粘贴&#x0a;• 单实例保护（重复启动被拒并提示）</TextBlock>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 快捷键 -->
+                <TabItem Header="快捷键" Padding="16,10">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,16">
+                        <StackPanel>
+                            <TextBlock Text="全局快捷键" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,8"/>
+                            <Border Background="#E8F0FE" CornerRadius="8" Padding="16" Margin="0,0,0,12" BorderBrush="#BBD7F5" BorderThickness="1">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    <Run FontWeight="SemiBold" Foreground="#0078D4">提示：</Run>
+                                    支持 Win、Ctrl、Alt、Shift 四种修饰键。若想用 Win+V 完全替代系统剪贴板历史，请先到
+                                    设置 → 系统 → 剪贴板 关闭"剪贴板历史记录"，再在本程序设置中按下 Win+V 即可接管。
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="历史条数上限" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
+                            </Border>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl + Alt + V" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="弹出 / 关闭悬浮历史列表（默认热键）" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Win + V" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#0078D4" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="替代系统剪贴板历史（需先关闭系统剪贴板历史）" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="↑ / ↓" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="在列表中上下移动选择" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Enter" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="粘贴所选条目并关闭列表" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl + V" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="粘贴为纯文本（去除格式）并关闭" Foreground="#444" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Text="列表内操作" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,8"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Esc" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="关闭列表（不粘贴）" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="鼠标双击" FontWeight="SemiBold" Foreground="#1A1A1A" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="文本：打开全文预览；图片：打开大图预览；文件：用默认程序打开" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Enter" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="粘贴所选条目到原窗口（含文件路径，可粘贴到文件对话框等）" Foreground="#444" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Ctrl + 滚轮" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="图片预览窗口内缩放" Foreground="#444" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 设置说明 -->
+                <TabItem Header="设置说明" Padding="16,10">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,16">
+                        <StackPanel>
+                            <TextBlock Text="热键设置" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,6"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    <Run FontWeight="SemiBold" Foreground="#0078D4">Win+V 覆盖（推荐）：</Run>勾选"启用 Win+V 覆盖"后，程序自动拦截 Win+V 并接管系统剪贴板历史，无需手动关闭系统设置，快捷键固定不可修改。&#x0a;&#x0a;<Run FontWeight="SemiBold" Foreground="#0078D4">自定义快捷键：</Run>取消勾选后可自定义。支持 Win、Ctrl、Alt、Shift 修饰键，主键支持 A-Z、0-9、F1-F24。&#x0a;示例：Ctrl+Alt+V（默认）、Win+V、Ctrl+Shift+V&#x0a;&#x0a;点击输入框后直接按下新的组合键即可设置。如果与其他软件冲突，可在设置中更换。
+                                </TextBlock>
+                            </Border>
+
+                            <TextBlock Text="历史条数上限" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,6"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
                                     范围：10 ~ 10000。超出上限时自动裁剪最旧的非置顶条目，置顶条目永不被裁剪。默认 500。
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="开机自动启动" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    勾选后写入注册表 Run 键，开机自动启动。取消勾选自动删除注册表项。如遇安全软件拦截，请允许。
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="默认纯文本粘贴" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    开启后，粘贴时始终以纯文本格式写入剪贴板（去除来源 HTML/RTF 格式）。关闭时按原始格式粘贴（文本仍为纯文本，图片保留像素，文件保留路径）。默认关闭。
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                            </Border>
 
-            <!-- 故障排除 -->
-            <TabItem Header="故障排除" Padding="8,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-                    <StackPanel Margin="4">
-                        <TextBlock Text="常见问题" FontSize="18" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,12"/>
-                        <Border Background="White" CornerRadius="8" Padding="16" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="热键无响应" FontWeight="SemiBold" Foreground="#D32F2F" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    1. 检查默认热键 Ctrl+Alt+V 是否与其他软件冲突（如 AutoHotkey、输入法快捷键）&#x0a;2. 尝试更换热键（设置 → 热键，按下新组合键后点确定）&#x0a;3. 确认程序以普通用户权限运行（非管理员也可）
+                            <TextBlock Text="开机自动启动" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,6"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    勾选后写入注册表 Run 键，开机自动启动。取消勾选自动删除注册表项。&#x0a;如遇安全软件拦截，请允许本程序开机启动。
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="开机自启后启动失败" FontWeight="SemiBold" Foreground="#D32F2F" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    检查杀毒软件是否拦截（加入白名单）。exe 路径已加引号，空格不影响。如果 exe 被移动或删除，请重新设置自启。
+                            </Border>
+
+                            <TextBlock Text="默认纯文本粘贴" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,6"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    开启后，粘贴时始终以纯文本格式写入剪贴板（去除来源 HTML/RTF 格式）。&#x0a;关闭时按原始格式粘贴（文本仍为纯文本，图片保留像素，文件保留路径）。默认关闭。
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="剪贴板内容丢失" FontWeight="SemiBold" Foreground="#D32F2F" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    历史记录存于 data/clipboard.db。如删除此文件会清空所有历史。请定期备份。程序崩溃时 SQLite WAL 模式可保证数据完整性（不丢未提交记录）。
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 故障排除 -->
+                <TabItem Header="故障排除" Padding="16,10">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,16">
+                        <StackPanel>
+                            <TextBlock Text="热键无响应" FontWeight="SemiBold" FontSize="15" Foreground="#D32F2F" Margin="0,0,0,6"/>
+                            <Border Background="#FFF5F5" CornerRadius="8" Padding="16" Margin="0,0,0,12" BorderBrush="#FFCDD2" BorderThickness="1">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    1. 检查默认热键 Ctrl+Alt+V 是否与其他软件冲突（如 AutoHotkey、输入法快捷键）&#x0a;2. 若设置 Win+V 提示注册失败：需先到 设置 → 系统 → 剪贴板 关闭"剪贴板历史记录"释放该热键&#x0a;3. 尝试更换热键（设置 → 热键，按下新组合键后点确定）&#x0a;4. 确认程序以普通用户权限运行（非管理员也可）
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="图片显示异常" FontWeight="SemiBold" Foreground="#D32F2F" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    确认剪贴板中为标准位图格式（截图工具如 Win+Shift+S、Snipaste 等均支持）。部分应用复制的图片格式可能不被识别。
+                            </Border>
+
+                            <TextBlock Text="开机自启后启动失败" FontWeight="SemiBold" FontSize="15" Foreground="#D32F2F" Margin="0,0,0,6"/>
+                            <Border Background="#FFF5F5" CornerRadius="8" Padding="16" Margin="0,0,0,12" BorderBrush="#FFCDD2" BorderThickness="1">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    检查杀毒软件是否拦截（加入白名单）。exe 路径已加引号，空格不影响。&#x0a;如果 exe 被移动或删除，请重新设置自启。
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="White" CornerRadius="8" Padding="16" Margin="0,8,0,0" BorderBrush="#E0E0E0" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="数据目录" FontWeight="SemiBold" Foreground="#0078D4" Margin="0,0,0,4"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#444" LineHeight="22">
-                                    数据目录位于程序同级 data/ 文件夹。如需迁移：关闭程序 → 整个 data 文件夹复制到新位置 → 覆盖原 data 目录。日志无独立文件，数据库自带 WAL 日志（.db-wal / .db-shm），可安全删除。
+                            </Border>
+
+                            <TextBlock Text="剪贴板内容丢失" FontWeight="SemiBold" FontSize="15" Foreground="#D32F2F" Margin="0,0,0,6"/>
+                            <Border Background="#FFF5F5" CornerRadius="8" Padding="16" Margin="0,0,0,12" BorderBrush="#FFCDD2" BorderThickness="1">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    历史记录存于 data/clipboard.db。如删除此文件会清空所有历史。请定期备份。&#x0a;程序崩溃时 SQLite WAL 模式可保证数据完整性。
                                 </TextBlock>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-        </TabControl>
+                            </Border>
+
+                            <TextBlock Text="数据目录" FontWeight="SemiBold" FontSize="15" Foreground="#0078D4" Margin="0,0,0,6"/>
+                            <Border Background="#F7F8FA" CornerRadius="8" Padding="16">
+                                <TextBlock TextWrapping="Wrap" Foreground="#333" LineHeight="22" FontSize="13">
+                                    数据目录位于程序同级 data/ 文件夹。如需迁移：关闭程序 → 整个 data 文件夹复制到新位置 → 覆盖原 data 目录。&#x0a;日志无独立文件，数据库自带 WAL 日志（.db-wal / .db-shm），可安全删除。
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </Border>
     </Grid>
 </Window>

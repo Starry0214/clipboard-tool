@@ -26,7 +26,7 @@
             <DropShadowEffect BlurRadius="24" ShadowDepth="2" Opacity="0.12" Color="#000000"/>
         </Border.Effect>
         <DockPanel>
-            <!-- 搜索框 -->
+            <!-- 搜索框 + 类型筛选 -->
             <Border DockPanel.Dock="Top"
                     Background="#F7F8FA"
                     CornerRadius="12,12,0,0"
@@ -42,7 +42,8 @@
                              Background="Transparent"
                              FontSize="13"
                              Foreground="#1A1A1A"
-                             CaretBrush="{StaticResource AccentBrush}">
+                             CaretBrush="{StaticResource AccentBrush}"
+                             Padding="0,0,90,0">
                         <TextBox.Style>
                             <Style TargetType="TextBox">
                                 <Setter Property="Template">
@@ -55,6 +56,49 @@
                             </Style>
                         </TextBox.Style>
                     </TextBox>
+                    <!-- 类型快捷筛选（图标 + 文字标签） -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <RadioButton x:Name="FilterAll" GroupName="TypeFilter"
+                                     Style="{StaticResource FilterIconButton}"
+                                     ToolTip="全部" Checked="OnFilterChanged">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE71C;"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                                <TextBlock Text="全部" Margin="5,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="FilterText" GroupName="TypeFilter"
+                                     Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                     ToolTip="只显示文本内容" Checked="OnFilterChanged">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE8A5;"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                                <TextBlock Text="文本" Margin="5,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="FilterImage" GroupName="TypeFilter"
+                                     Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                     ToolTip="只显示图片" Checked="OnFilterChanged">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE91B;"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                                <TextBlock Text="图片" Margin="5,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="FilterFile" GroupName="TypeFilter"
+                                     Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                     ToolTip="只显示文件" Checked="OnFilterChanged">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE8B7;"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                                <TextBlock Text="文件" Margin="5,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            </StackPanel>
+                        </RadioButton>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -78,12 +122,17 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Bd"
-                                            Background="Transparent"
-                                            CornerRadius="8"
-                                            Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter/>
-                                    </Border>
+                                    <Grid>
+                                        <Border x:Name="Bd"
+                                                Background="Transparent"
+                                                CornerRadius="8"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <!-- 条目间分隔线 -->
+                                        <Rectangle Height="1" Fill="#ECECEC"
+                                                   VerticalAlignment="Bottom" Margin="10,0"/>
+                                    </Grid>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="Bd" Property="Background" Value="#E8F0FE"/>
@@ -99,17 +148,30 @@
                 </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid MinHeight="32">
-                            <!-- 图片条目 -->
+                        <Grid x:Name="Root" MinHeight="32">
+                            <!-- 右键快捷菜单：置顶 / 删除 / 预览 / 粘贴 -->
+                            <Grid.ContextMenu>
+                                <ContextMenu Style="{StaticResource FluentContextMenu}" Opened="OnContextMenuOpened">
+                                    <ContextMenu.Resources>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource FluentMenuItem}"/>
+                                        <Style TargetType="Separator" BasedOn="{StaticResource FluentMenuSeparator}"/>
+                                    </ContextMenu.Resources>
+                                    <MenuItem Header="置顶" Click="OnPin"/>
+                                    <MenuItem Header="删除" Click="OnDelete"/>
+                                    <Separator/>
+                                    <MenuItem Header="预览" Click="OnPreview"/>
+                                    <MenuItem Header="粘贴" Click="OnPaste"/>
+                                </ContextMenu>
+                            </Grid.ContextMenu>
+                            <!-- 图片条目：缩略图 -->
                             <StackPanel x:Name="ImagePanel" Orientation="Horizontal" Visibility="Collapsed">
                                 <Border CornerRadius="6" ClipToBounds="True" BorderBrush="#E8E8E8" BorderThickness="1">
                                     <Image Source="{Binding Thumb, Converter={StaticResource ThumbConverter}}"
-                                           MaxWidth="180" MaxHeight="90"
                                            Stretch="Uniform"
                                            SnapsToDevicePixels="True"/>
                                 </Border>
                             </StackPanel>
-                            <!-- 文件条目 -->
+                            <!-- 文件条目：图标 + 路径（两行换行完整显示） -->
                             <StackPanel x:Name="FilePanel" Orientation="Horizontal" Visibility="Collapsed">
                                 <Border Background="#E8F0FE" CornerRadius="6" Width="32" Height="32"
                                         Margin="0,0,10,0" VerticalAlignment="Center">
@@ -121,17 +183,22 @@
                                                VerticalAlignment="Center"/>
                                 </Border>
                                 <TextBlock Text="{Binding Content}"
-                                           TextTrimming="CharacterEllipsis"
-                                           MaxWidth="320"
+                                           TextWrapping="Wrap"
+                                           LineHeight="19"
+                                           MaxHeight="38"
+                                           MaxWidth="300"
                                            FontSize="13"
                                            Foreground="#1A1A1A"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
-                            <!-- 文本条目 -->
+                            <!-- 文本条目：两行截断，全文见 ToolTip / 双击预览 -->
                             <TextBlock x:Name="TextLine"
                                        Text="{Binding Content}"
-                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="Wrap"
+                                       LineHeight="19"
+                                       MaxHeight="38"
                                        MaxWidth="370"
+                                       TextTrimming="CharacterEllipsis"
                                        FontSize="13"
                                        Foreground="#1A1A1A"
                                        VerticalAlignment="Center"/>
@@ -147,10 +214,12 @@
                             <DataTrigger Binding="{Binding Type}" Value="image">
                                 <Setter TargetName="ImagePanel" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="FilePanel" Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Type}" Value="file">
                                 <Setter TargetName="FilePanel" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="ImagePanel" Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Pinned}" Value="True">
                                 <Setter TargetName="PinBadge" Property="Visibility" Value="Visible"/>

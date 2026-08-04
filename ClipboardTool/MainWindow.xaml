@@ -6,7 +6,8 @@
         Width="520" Height="560"
         MinWidth="420" MinHeight="360"
         WindowStartupLocation="CenterScreen"
-        Background="#F3F3F3">
+        Background="#F3F3F3"
+        Icon="{StaticResource AppIcon}">
     <Window.Resources>
         <local:ThumbnailConverter x:Key="ThumbConverter"/>
     </Window.Resources>
@@ -26,7 +27,49 @@
                            Visibility="{Binding Text.Length, ElementName=SearchBox, Converter={StaticResource StringToVisibility}}"/>
                 <TextBox x:Name="SearchBox"
                          BorderThickness="0" Background="Transparent" FontSize="13"
-                         VerticalContentAlignment="Center" Margin="-4,0"/>
+                         VerticalContentAlignment="Center" Margin="-4,0" Padding="0,0,96,0"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <RadioButton x:Name="FilterAll" GroupName="TypeFilter"
+                                 Style="{StaticResource FilterIconButton}"
+                                 ToolTip="全部" Checked="OnFilterChanged">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE71C;"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                            <TextBlock Text="全部" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="FilterText" GroupName="TypeFilter"
+                                 Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                 ToolTip="只显示文本内容" Checked="OnFilterChanged">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE8A5;"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                            <TextBlock Text="文本" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="FilterImage" GroupName="TypeFilter"
+                                 Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                 ToolTip="只显示图片" Checked="OnFilterChanged">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE91B;"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                            <TextBlock Text="图片" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="FilterFile" GroupName="TypeFilter"
+                                 Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                 ToolTip="只显示文件" Checked="OnFilterChanged">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="13" Text="&#xE8B7;"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" VerticalAlignment="Center"/>
+                            <TextBlock Text="文件" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -43,13 +86,15 @@
                 </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid MinHeight="30">
+                        <Grid x:Name="Root" MinHeight="30">
+                            <!-- 图片条目：缩略图 -->
                             <StackPanel x:Name="ImagePanel" Orientation="Horizontal" Visibility="Collapsed">
                                 <Border CornerRadius="6" ClipToBounds="True" BorderBrush="#E8E8E8" BorderThickness="1">
                                     <Image Source="{Binding Thumb, Converter={StaticResource ThumbConverter}}"
-                                           MaxWidth="180" MaxHeight="90" Stretch="Uniform"/>
+                                           Stretch="Uniform"/>
                                 </Border>
                             </StackPanel>
+                            <!-- 文件条目：图标 + 路径（两行换行完整显示） -->
                             <StackPanel x:Name="FilePanel" Orientation="Horizontal" Visibility="Collapsed">
                                 <Border Background="#E8F0FE" CornerRadius="6" Width="28" Height="28"
                                         Margin="0,0,8,0" VerticalAlignment="Center">
@@ -58,11 +103,16 @@
                                                Foreground="#0078D4"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock Text="{Binding Content}" TextTrimming="CharacterEllipsis"
+                                <TextBlock Text="{Binding Content}"
+                                           TextWrapping="Wrap" LineHeight="19" MaxHeight="38" MaxWidth="300"
                                            FontSize="13" VerticalAlignment="Center" Foreground="#1A1A1A"/>
                             </StackPanel>
                             <TextBlock x:Name="TextLine"
-                                       Text="{Binding Content}" TextTrimming="CharacterEllipsis"
+                                       Text="{Binding Content}"
+                                       TextWrapping="Wrap"
+                                       LineHeight="19"
+                                       MaxHeight="38"
+                                       TextTrimming="CharacterEllipsis"
                                        FontSize="13" VerticalAlignment="Center" Foreground="#1A1A1A"/>
                             <Border x:Name="PinBadge" Visibility="Collapsed"
                                     Background="#E8F0FE" CornerRadius="4" Padding="4,2"
@@ -74,10 +124,12 @@
                             <DataTrigger Binding="{Binding Type}" Value="image">
                                 <Setter TargetName="ImagePanel" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="FilePanel" Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Type}" Value="file">
                                 <Setter TargetName="FilePanel" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="ImagePanel" Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Pinned}" Value="True">
                                 <Setter TargetName="PinBadge" Property="Visibility" Value="Visible"/>
