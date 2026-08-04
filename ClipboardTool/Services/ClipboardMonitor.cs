@@ -89,16 +89,22 @@ public sealed class ClipboardMonitor
         {
             if (data.GetData(DataFormats.Bitmap) is BitmapSource bmp && bmp.PixelWidth > 0)
             {
-                var full = EncodePng(bmp);
+                // 原图保存为 PNG 文件（Content 记录文件路径，粘贴纯文本时可给出路径）
+                var png = EncodePng(bmp);
                 var thumb = EncodePng(MakeThumb(bmp, 200));
-                _store.Add(new Entry
+                var path = _store.SaveImageFile(png);
+                var added = _store.Add(new Entry
                 {
                     Type = "image",
-                    Content = $"{bmp.PixelWidth}x{bmp.PixelHeight}",
-                    Image = full,
+                    Content = path,
+                    Image = png, // 仅用于内容哈希去重，不入库
                     Thumb = thumb,
                     CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 });
+                if (!added)
+                {
+                    try { File.Delete(path); } catch (IOException) { }
+                }
             }
             return;
         }

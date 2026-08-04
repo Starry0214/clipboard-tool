@@ -8,10 +8,13 @@ namespace ClipboardTool;
 public sealed class ClipboardStore : IDisposable
 {
     private readonly SqliteConnection _conn;
+    private readonly string _imagesDir;
 
     public ClipboardStore(string dataDir)
     {
         Directory.CreateDirectory(dataDir);
+        _imagesDir = Path.Combine(dataDir, "images");
+        Directory.CreateDirectory(_imagesDir);
         _conn = new SqliteConnection($"Data Source={Path.Combine(dataDir, "clipboard.db")}");
         _conn.Open();
         using var cmd = _conn.CreateCommand();
@@ -49,31 +52,40 @@ public sealed class ClipboardStore : IDisposable
 
     public int MaxEntries { get; set; } = 500;
 
-    /// <summary>新增条目。按内容哈希去重（文本/文件按内容、图片按像素字节），重复则刷新时间并移顶。</summary>
-    public void Add(Entry e)
+    /// <summary>原图保存为 PNG 文件（图片不再以 BLOB 入库），返回文件路径。</summary>
+    public string SaveImageFile(byte[] png)
+    {
+        var path = Path.Combine(_imagesDir, $"{Guid.NewGuid():N}.png");
+        File.WriteAllBytes(path, png);
+        return path;
+    }
+
+    /// <summary>新增条目。按内容哈希去重（文本/文件按内容、图片按像素字节），重复则刷新时间并移顶。返回是否新增（去重时返回 false）。</summary>
+    public bool Add(Entry e)
     {
         var hash = ComputeHash(e);
         if (ExistsByHash(hash))
         {
             Touch(hash);
-            return;
+            return false;
         }
 
         using var cmd = _conn.CreateCommand();
+        // 图片原图以文件存储（Content=文件路径），image 列不再写入
         cmd.CommandText = """
-            INSERT INTO entries (type, content, hash, thumb, image, pinned, created_at)
-            VALUES ($type, $content, $hash, $thumb, $image, $pinned, $created)
+            INSERT INTO entries (type, content, hash, thumb, pinned, created_at)
+            VALUES ($type, $content, $hash, $thumb, $pinned, $created)
             """;
         cmd.Parameters.AddWithValue("$type", e.Type);
         cmd.Parameters.AddWithValue("$content", e.Content);
         cmd.Parameters.AddWithValue("$hash", hash);
         cmd.Parameters.AddWithValue("$thumb", (object?)e.Thumb ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$image", (object?)e.Image ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$pinned", e.Pinned ? 1 : 0);
         cmd.Parameters.AddWithValue("$created", e.CreatedAt);
         cmd.ExecuteNonQuery();
 
         Trim();
+        return true;
     }
 
     private static string ComputeHash(Entry e)
@@ -101,9 +113,24 @@ public sealed class ClipboardStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>裁剪超出上限的最旧非置顶条目。降低上限后由调用方显式触发。</summary>
+    /// <summary>裁剪超出上限的最旧非置顶条目，并清理被删图片的文件。降低上限后由调用方显式触发。</summary>
     public void Trim()
     {
+        var files = new List<string>();
+        using (var sel = _conn.CreateCommand())
+        {
+            sel.CommandText = """
+                SELECT content FROM entries
+                WHERE pinned = 0 AND type = 'image' AND id NOT IN (
+                    SELECT id FROM entries ORDER BY pinned DESC, created_at DESC LIMIT $max
+                )
+                """;
+            sel.Parameters.AddWithValue("$max", Math.Max(MaxEntries, 1));
+            using var reader = sel.ExecuteReader();
+            while (reader.Read())
+                files.Add(reader.GetString(0));
+        }
+
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = """
             DELETE FROM entries WHERE pinned = 0 AND id NOT IN (
@@ -112,6 +139,9 @@ public sealed class ClipboardStore : IDisposable
             """;
         cmd.Parameters.AddWithValue("$max", Math.Max(MaxEntries, 1));
         cmd.ExecuteNonQuery();
+
+        foreach (var f in files)
+            TryDeleteFile(f);
     }
 
     /// <summary>查询历史：置顶优先、时间倒序。列表查询不含原图 BLOB（仅缩略图）。type 为空表示全部类型。</summary>
@@ -151,7 +181,7 @@ public sealed class ClipboardStore : IDisposable
         return list;
     }
 
-    /// <summary>取含原图的完整条目（回贴用）。</summary>
+    /// <summary>取含原图的完整条目（回贴用）。图片原图优先从 DB BLOB（旧数据）读取，否则从文件读取。</summary>
     public Entry? GetById(long id)
     {
         using var cmd = _conn.CreateCommand();
@@ -160,7 +190,7 @@ public sealed class ClipboardStore : IDisposable
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
             return null;
-        return new Entry
+        var entry = new Entry
         {
             Id = reader.GetInt64(0),
             Type = reader.GetString(1),
@@ -170,6 +200,18 @@ public sealed class ClipboardStore : IDisposable
             Pinned = reader.GetInt64(5) != 0,
             CreatedAt = reader.GetInt64(6),
         };
+        if (entry.Type == "image" && entry.Image is null && !string.IsNullOrEmpty(entry.Content))
+        {
+            try
+            {
+                if (File.Exists(entry.Content))
+                    entry.Image = File.ReadAllBytes(entry.Content);
+            }
+            catch (IOException)
+            {
+            }
+        }
+        return entry;
     }
 
     public void SetPinned(long id, bool pinned)
@@ -183,10 +225,22 @@ public sealed class ClipboardStore : IDisposable
 
     public void Delete(long id)
     {
+        string? file = null;
+        using (var sel = _conn.CreateCommand())
+        {
+            sel.CommandText = "SELECT content FROM entries WHERE id = $id AND type = 'image'";
+            sel.Parameters.AddWithValue("$id", id);
+            var v = sel.ExecuteScalar();
+            if (v is string s)
+                file = s;
+        }
+
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = "DELETE FROM entries WHERE id = $id";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+
+        TryDeleteFile(file);
     }
 
     public void Clear()
@@ -194,6 +248,29 @@ public sealed class ClipboardStore : IDisposable
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = "DELETE FROM entries";
         cmd.ExecuteNonQuery();
+
+        // 清理所有图片文件
+        try
+        {
+            if (Directory.Exists(_imagesDir))
+                foreach (var f in Directory.GetFiles(_imagesDir))
+                    TryDeleteFile(f);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    private static void TryDeleteFile(string? path)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
     }
 
     public void Dispose() => _conn.Dispose();
