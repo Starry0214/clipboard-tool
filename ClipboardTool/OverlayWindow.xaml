@@ -1,0 +1,129 @@
+<Window x:Class="ClipboardTool.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ClipboardTool"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Width="440"
+        SizeToContent="Height"
+        MaxHeight="520"
+        Focusable="True"
+        SnapsToDevicePixels="True">
+    <Window.Resources>
+        <local:ThumbnailConverter x:Key="ThumbConverter"/>
+    </Window.Resources>
+    <Border CornerRadius="10"
+            Background="#F7F8FA"
+            BorderBrush="#C9CDD4"
+            BorderThickness="1"
+            Margin="10"
+            Padding="10">
+        <DockPanel>
+            <Border DockPanel.Dock="Top"
+                    Background="#EDEFF2"
+                    CornerRadius="6"
+                    Padding="8,4"
+                    Margin="0,0,0,8">
+                <TextBox x:Name="SearchBox"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         FontSize="13"
+                         Foreground="#333333">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="TextBox">
+                                        <ScrollViewer x:Name="PART_ContentHost"/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </Border>
+            <ListBox x:Name="HistoryList"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="8,6"/>
+                        <Setter Property="Margin" Value="0,1"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="6"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#DCE9F7"/>
+                                        </Trigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#E8EEF5"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid MinHeight="30">
+                            <StackPanel x:Name="ImagePanel" Orientation="Horizontal" Visibility="Collapsed">
+                                <Image Source="{Binding Thumb, Converter={StaticResource ThumbConverter}}"
+                                       MaxWidth="180" MaxHeight="90"
+                                       Stretch="Uniform"
+                                       SnapsToDevicePixels="True"/>
+                            </StackPanel>
+                            <StackPanel x:Name="FilePanel" Orientation="Horizontal" Visibility="Collapsed">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           Text="&#xE8B7;"
+                                           FontSize="15"
+                                           Foreground="#60666E"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding Content}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="340"
+                                           FontSize="13"
+                                           Foreground="#333333"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TextLine"
+                                       Text="{Binding Content}"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxWidth="370"
+                                       FontSize="13"
+                                       Foreground="#333333"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Type}" Value="image">
+                                <Setter TargetName="ImagePanel" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Type}" Value="file">
+                                <Setter TargetName="FilePanel" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="TextLine" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </Border>
+</Window>

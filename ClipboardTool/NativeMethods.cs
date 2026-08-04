@@ -1,0 +1,52 @@
+using System.Runtime.InteropServices;
+
+namespace ClipboardTool;
+
+internal static class NativeMethods
+{
+    // ---- 剪贴板监听 ----
+    [DllImport("user32.dll")]
+    internal static extern bool AddClipboardFormatListener(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    internal static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+
+    // ---- 全局热键 ----
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    // ---- 前台窗口 / 按键模拟 ----
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    internal static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    internal static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    // ---- 屏幕坐标 ----
+    [DllImport("user32.dll")]
+    internal static extern bool GetCursorPos(out POINT pt);
+
+    // ---- 常量 ----
+    internal const int WM_CLIPBOARDUPDATE = 0x031D;
+    internal const int WM_HOTKEY = 0x0312;
+
+    internal const uint KEYEVENTF_KEYUP = 0x0002;
+    internal const uint MOD_ALT = 0x0001;
+    internal const uint MOD_CONTROL = 0x0002;
+    internal const uint MOD_SHIFT = 0x0004;
+    internal const uint MOD_NOREPEAT = 0x4000;
+    internal const byte VK_V = 0x56;
+    internal const byte VK_CONTROL = 0x11;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct POINT
+    {
+        public int X, Y;
+    }
+}
