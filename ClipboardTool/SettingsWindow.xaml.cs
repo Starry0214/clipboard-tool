@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
@@ -25,7 +26,51 @@ public partial class SettingsWindow : Window
 
         HotkeyBox.PreviewKeyDown += OnHotkeyKeyDown;
         HotkeyBox.GotKeyboardFocus += (_, _) => HotkeyBox.SelectAll();
+        LoadDataInfo();
     }
+
+    /// <summary>展示数据目录路径与占用大小。</summary>
+    private void LoadDataInfo()
+    {
+        var dataDir = (Application.Current as App)?.DataDir ?? "";
+        DataDirText.Text = dataDir;
+        SizeText.Text = $"占用 {FormatSize(CalcDirSize(dataDir))}";
+    }
+
+    private void OnOpenDataDir(object sender, RoutedEventArgs e)
+    {
+        var dataDir = (Application.Current as App)?.DataDir ?? "";
+        try
+        {
+            if (Directory.Exists(dataDir))
+                Process.Start("explorer.exe", dataDir);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static long CalcDirSize(string dir)
+    {
+        long total = 0;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                total += new FileInfo(f).Length;
+        }
+        catch (Exception)
+        {
+        }
+        return total;
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):F1} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):F0} MB",
+        >= 1L << 10 => $"{bytes / (double)(1L << 10):F0} KB",
+        _ => $"{bytes} B",
+    };
 
     /// <summary>Win+V 覆盖模式：禁用自定义热键输入框并显示提示。</summary>
     private void UpdateWinVState()

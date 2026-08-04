@@ -21,6 +21,9 @@ public partial class App : Application
     private MainWindow? _main;
     private HelpWindow? _help;
 
+    /// <summary>数据目录（%LocalAppData%\ClipboardTool），与程序分离，更新程序不丢数据。</summary>
+    public string DataDir { get; private set; } = "";
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -33,7 +36,25 @@ public partial class App : Application
             return;
         }
 
-        var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+        // 数据目录：%LocalAppData%\ClipboardTool（标准程序数据位置）；
+        // 旧版同目录 data/ 首次运行时自动迁移
+        var dataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardTool");
+        var legacyDir = Path.Combine(AppContext.BaseDirectory, "data");
+        if (Directory.Exists(legacyDir) && !Directory.Exists(dataDir))
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(dataDir)!);
+                Directory.Move(legacyDir, dataDir);
+            }
+            catch (Exception)
+            {
+                dataDir = legacyDir; // 迁移失败回退旧位置，不丢数据
+            }
+        }
+        DataDir = dataDir;
+
         _settings = Settings.Load(dataDir);
         _store = new ClipboardStore(dataDir) { MaxEntries = _settings.MaxEntries };
         _monitor = new ClipboardMonitor(_store);

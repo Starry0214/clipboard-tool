@@ -40,8 +40,20 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="当前设置文件" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,6"/>
-                <TextBlock Text="data/settings.json（程序同级目录）" FontSize="12" Foreground="#888888" TextWrapping="Wrap"/>
+                <TextBlock Text="数据目录" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,6"/>
+                <Border Style="{StaticResource CardBorder}" Margin="0,0,0,4">
+                    <StackPanel Margin="4">
+                        <TextBlock Text="历史记录与设置保存在独立数据目录，更新/覆盖程序不会丢失内容。"
+                                   FontSize="12" Foreground="#888888" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="DataDirText" FontSize="11" Foreground="#666666" TextWrapping="Wrap" LineHeight="16"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="打开数据目录" Style="{StaticResource FluentButtonSecondary}"
+                                    Padding="10,4" FontSize="12" Click="OnOpenDataDir"/>
+                            <TextBlock x:Name="SizeText" FontSize="12" Foreground="#666666"
+                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 
