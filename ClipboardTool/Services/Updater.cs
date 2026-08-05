@@ -88,13 +88,15 @@ public static class Updater
     public static void Apply(string newExePath, string currentExePath)
     {
         var bat = Path.Combine(Path.GetTempPath(), $"clipboard_updater_{Guid.NewGuid():N}.bat");
+        // bat 按 UTF-8 写入；开头 chcp 65001 切换代码页，否则中文路径在 GBK 默认代码页下乱码导致 copy/start 失败
         File.WriteAllText(bat,
             $"@echo off\r\n" +
+            $"chcp 65001 >nul\r\n" +
             $"timeout /t 3 /nobreak >nul\r\n" +
             $"copy /y \"{newExePath}\" \"{currentExePath}\" >nul\r\n" +
             $"del \"{newExePath}\" >nul 2>&1\r\n" +
             $"start \"\" \"{currentExePath}\"\r\n" +
-            $"del \"%~f0\"\r\n");
+            $"del \"%~f0\"\r\n", new System.Text.UTF8Encoding(false));
         Process.Start(new ProcessStartInfo
         {
             FileName = bat,

@@ -20,11 +20,11 @@ public sealed class TrayIcon : IDisposable
     public TrayIcon()
     {
         var menu = new ContextMenuStrip();
-        var miOpen = new ToolStripMenuItem("打开历史记录");
+        var miOpen = new ToolStripMenuItem("打开主界面");
         var miHelp = new ToolStripMenuItem("使用说明");
         var miUpdate = new ToolStripMenuItem("检查更新");
         var miFeedback = new ToolStripMenuItem("反馈问题");
-        var miPause = new ToolStripMenuItem("暂停监听") { CheckOnClick = true };
+        var miPause = new ToolStripMenuItem("暂停记录剪贴板") { CheckOnClick = true };
         var miClear = new ToolStripMenuItem("清空历史");
         var miExit = new ToolStripMenuItem("退出");
 
