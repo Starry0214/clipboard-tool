@@ -30,7 +30,7 @@ public partial class App : Application
 
         if (!_mutex.WaitOne(TimeSpan.Zero, true))
         {
-            MessageBox.Show("剪贴板工具已在运行。", "剪贴板工具",
+            MessageBox.Show("剪贴板助手已在运行。", "剪贴板助手",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
@@ -47,13 +47,19 @@ public partial class App : Application
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(dataDir)!);
                 Directory.Move(legacyDir, dataDir);
+                Log.Info($"旧数据迁移成功: {legacyDir} → {dataDir}");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 dataDir = legacyDir; // 迁移失败回退旧位置，不丢数据
+                Log.Error("旧数据迁移失败，回退旧目录", ex);
             }
         }
         DataDir = dataDir;
+
+        Log.Init(dataDir);
+        Log.Info($"程序启动 v{Updater.CurrentVersion}，数据目录 {dataDir}");
+        HookUnhandledExceptions();
 
         _settings = Settings.Load(dataDir);
         _store = new ClipboardStore(dataDir) { MaxEntries = _settings.MaxEntries };
@@ -97,6 +103,9 @@ public partial class App : Application
         // 测试钩子：--show-overlay 直接弹出悬浮列表（等效热键路径）
         if (e.Args.Contains("--show-overlay"))
             Dispatcher.BeginInvoke(OnHotkeyPressed);
+        // 测试钩子：--throw 模拟 UI 线程未处理异常（验证错误窗与日志）
+        if (e.Args.Contains("--throw"))
+            Dispatcher.BeginInvoke(new Action(() => throw new InvalidOperationException("测试异常：--throw 触发")));
         // 测试钩子：--show-main 直接打开主窗口
         if (e.Args.Contains("--show-main"))
             Dispatcher.BeginInvoke(OpenMainWindow);
@@ -113,9 +122,11 @@ public partial class App : Application
     /// <summary>检查更新：自动模式静默，手动模式带反馈。有更新时引导下载并重启安装。</summary>
     private async Task CheckForUpdateAsync(bool manual)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var latest = await Updater.CheckAsync();
         if (latest is null)
         {
+            Log.Error("检查更新失败：无法连接更新服务器");
             if (manual)
                 MessageBox.Show("检查更新失败：无法连接更新服务器。", "检查更新",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -124,30 +135,41 @@ public partial class App : Application
 
         if (!Updater.IsNewer(latest))
         {
+            Log.Info($"检查更新：当前已是最新 v{Updater.CurrentVersion}");
             if (manual)
                 MessageBox.Show($"当前已是最新版本（v{Updater.CurrentVersion}）。", "检查更新",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
+        Log.Info($"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）");
         var answer = MessageBox.Show($"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）。\n是否下载并安装？", "发现更新",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (answer != MessageBoxResult.Yes)
             return;
 
-        var newExe = await Updater.DownloadAsync(DataDir);
+        Log.Info("开始下载更新");
+        var progressWin = new UpdateProgressWindow();
+        progressWin.Show();
+        var newExe = await Updater.DownloadAsync(DataDir,
+            new Progress<Updater.DownloadProgress>(progressWin.Report));
+        if (progressWin.IsVisible)
+            progressWin.Close();
         if (newExe is null)
         {
+            Log.Error($"下载更新失败，耗时 {sw.Elapsed.TotalSeconds:F1}s");
             MessageBox.Show("下载更新失败，请检查网络后重试。", "更新失败",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
+        Log.Info($"下载完成 v{latest}，耗时 {sw.Elapsed.TotalSeconds:F1}s");
         var confirm = MessageBox.Show("更新已下载完成，是否立即重启以完成更新？", "更新就绪",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
             return;
 
+        Log.Info("用户确认重启安装");
         Updater.Apply(newExe, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ClipboardTool.exe"));
         Shutdown();
     }
@@ -179,9 +201,28 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"全局热键注册失败：{ex.Message}\n请在设置中更换热键。", "剪贴板工具",
+            Log.Error($"全局热键注册失败: {ex.Message}");
+            MessageBox.Show($"全局热键注册失败：{ex.Message}\n请在设置中更换热键。", "剪贴板助手",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    /// <summary>全局未处理异常捕获：UI 线程弹窗+记日志，其余线程记日志。</summary>
+    private void HookUnhandledExceptions()
+    {
+        DispatcherUnhandledException += (_, e) =>
+        {
+            Log.Error("UI 线程未处理异常", e.Exception);
+            e.Handled = true;
+            ErrorWindow.ShowError("出错了", $"程序遇到未处理的错误：\n\n{e.Exception.Message}\n\n可以点击“上报日志”帮助排查。");
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Log.Error("AppDomain 未处理异常", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Log.Error("Task 未观察异常", e.Exception);
+            e.SetObserved();
+        };
     }
 
     private void OnHotkeyPressed()
@@ -218,7 +259,7 @@ public partial class App : Application
 
     private void OnClearHistory()
     {
-        var result = MessageBox.Show("确定要清空全部历史记录吗？", "清空历史",
+        var result = MessageBox.Show("确定要清空全部历史记录吗？置顶条目将保留。", "清空历史",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result == MessageBoxResult.Yes)
             _store.Clear();
@@ -233,6 +274,7 @@ public partial class App : Application
     /// <summary>应用设置变更（热键、上限、自启）。</summary>
     public void ApplySettings()
     {
+        Log.Info($"设置变更: MaxEntries={_settings.MaxEntries}, UseWinV={_settings.UseWinV}, Hotkey={_settings.HotkeyText}");
         _store.MaxEntries = _settings.MaxEntries;
         _store.Trim();
         _settings.ApplyAutoStart();
@@ -241,6 +283,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Log.Info("程序退出");
         _tray?.Dispose();
         _monitor?.Stop();
         _hotkeys?.Unregister();
