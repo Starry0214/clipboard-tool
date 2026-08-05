@@ -67,9 +67,10 @@ public sealed class ClipboardMonitor
         {
             Capture();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // 剪贴板被其他进程锁定或格式无法读取时跳过本次
+            Log.Error("剪贴板捕获失败", ex);
         }
     }
 
@@ -81,7 +82,10 @@ public sealed class ClipboardMonitor
         {
             var text = data.GetData(DataFormats.UnicodeText) as string;
             if (!string.IsNullOrEmpty(text))
+            {
                 _store.Add(new Entry { Type = "text", Content = text, CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+                Log.Info($"捕获文本 {text.Length} 字符");
+            }
             return;
         }
 
@@ -92,6 +96,7 @@ public sealed class ClipboardMonitor
                 // 原图保存为 PNG 文件（Content 记录文件路径，粘贴纯文本时可给出路径）
                 var png = EncodePng(bmp);
                 var thumb = EncodePng(MakeThumb(bmp, 200));
+                Log.Info($"捕获图片 {bmp.PixelWidth}x{bmp.PixelHeight}，PNG {png.Length / 1024}KB");
                 var path = _store.SaveImageFile(png);
                 var added = _store.Add(new Entry
                 {
@@ -112,7 +117,10 @@ public sealed class ClipboardMonitor
         if (data.GetDataPresent(DataFormats.FileDrop))
         {
             if (data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            {
                 _store.Add(new Entry { Type = "file", Content = files[0], CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+                Log.Info($"捕获文件 {files[0]}");
+            }
         }
     }
 

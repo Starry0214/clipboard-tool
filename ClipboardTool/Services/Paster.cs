@@ -27,14 +27,18 @@ public static class Paster
             {
                 NativeMethods.SetForegroundWindow(target);
                 Thread.Sleep(30);
-                WriteClipboardWin32(entry);
+                if (plainTextOnly)
+                    Retry(() => SetClipboardText(entry.Content)); // 强制纯文本：文本=内容、文件=路径、图片=尺寸
+                else
+                    WriteClipboardWin32(entry);
                 Thread.Sleep(60);
                 SendCtrlV();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // 剪贴板持续被占用：复位抑制标志避免吞掉下一次捕获
                 monitor.SuppressNext = false;
+                Log.Error($"粘贴失败（类型 {entry.Type}）", ex);
             }
         });
         worker.SetApartmentState(ApartmentState.STA);
@@ -44,19 +48,24 @@ public static class Paster
 
     // ---- Win32 剪贴板写入（带重试） ----
 
-    private static void WriteClipboardWin32(Entry entry)
+    private static void WriteClipboardWin32(Entry entry) => Retry(() =>
+    {
+        if (entry.Type == "image" && entry.Image is not null)
+            SetClipboardImage(entry.Image);
+        else if (entry.Type == "file")
+            SetClipboardFiles(entry.Content);
+        else
+            SetClipboardText(entry.Content);
+    });
+
+    private static void Retry(Action write)
     {
         Exception? last = null;
         for (var i = 0; i < 5; i++)
         {
             try
             {
-                if (entry.Type == "image" && entry.Image is not null)
-                    SetClipboardImage(entry.Image);
-                else if (entry.Type == "file")
-                    SetClipboardFiles(entry.Content);
-                else
-                    SetClipboardText(entry.Content);
+                write();
                 return;
             }
             catch (Exception ex)
@@ -124,7 +133,8 @@ public static class Paster
     private static void SetClipboardImage(byte[] png)
     {
         using var bmp = BitmapFromPng(png);
-        var h = ConvertToDib(bmp);
+        var hDib = ConvertToDib(bmp);
+        var hPng = CopyBytesToHGlobal(png);
         try
         {
             if (!NativeMethods.OpenClipboard(IntPtr.Zero))
@@ -132,9 +142,14 @@ public static class Paster
             try
             {
                 NativeMethods.EmptyClipboard();
-                if (NativeMethods.SetClipboardData(NativeMethods.CF_DIB, h) == IntPtr.Zero)
-                    throw new InvalidOperationException("SetClipboardData 失败");
-                h = IntPtr.Zero; // 系统接管内存
+                // 同时提供 CF_DIB 与 CF_PNG，兼容不同应用对图片格式的识别
+                if (NativeMethods.SetClipboardData(NativeMethods.CF_DIB, hDib) == IntPtr.Zero)
+                    throw new InvalidOperationException("SetClipboardData(DIB) 失败");
+                hDib = IntPtr.Zero; // 系统接管内存
+                var pngFormat = NativeMethods.RegisterClipboardFormat("PNG");
+                if (NativeMethods.SetClipboardData(pngFormat, hPng) == IntPtr.Zero)
+                    throw new InvalidOperationException("SetClipboardData(PNG) 失败");
+                hPng = IntPtr.Zero;
             }
             finally
             {
@@ -143,9 +158,18 @@ public static class Paster
         }
         finally
         {
-            if (h != IntPtr.Zero)
-                Marshal.FreeHGlobal(h);
+            if (hDib != IntPtr.Zero)
+                Marshal.FreeHGlobal(hDib);
+            if (hPng != IntPtr.Zero)
+                Marshal.FreeHGlobal(hPng);
         }
+    }
+
+    private static IntPtr CopyBytesToHGlobal(byte[] bytes)
+    {
+        var h = Marshal.AllocHGlobal(bytes.Length);
+        Marshal.Copy(bytes, 0, h, bytes.Length);
+        return h;
     }
 
     /// <summary>PNG BLOB → System.Drawing.Bitmap。</summary>
