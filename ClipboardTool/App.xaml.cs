@@ -96,6 +96,7 @@ public partial class App : Application
         _tray.OpenMain += OpenMainWindow;
         _tray.ShowHelp += OpenHelp;
         _tray.CheckUpdate += () => _ = CheckForUpdateAsync(manual: true);
+        _tray.Feedback += ErrorWindow.ShowFeedback;
         _tray.TogglePause += OnTogglePause;
         _tray.ClearHistory += OnClearHistory;
         _tray.Exit += OnExitRequested;
