@@ -36,6 +36,21 @@ public static class Updater
     public static bool IsNewer(string latest) =>
         Version.TryParse(latest, out var v) && v > Version.Parse(CurrentVersion);
 
+    /// <summary>拉取服务器上的更新简介（notes.txt，≤8KB）；失败或为空返回 null。</summary>
+    public static async Task<string?> GetNotesAsync()
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            var text = await http.GetStringAsync($"{UpdateBaseUrl}/notes.txt");
+            return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>下载进度：已下载字节 / 总字节（未知为 0）/ 瞬时速度（字节每秒）。</summary>
     public readonly record struct DownloadProgress(long BytesReceived, long TotalBytes, double BytesPerSecond);
 

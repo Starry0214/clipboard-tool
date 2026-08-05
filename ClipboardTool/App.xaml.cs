@@ -118,6 +118,10 @@ public partial class App : Application
             await CheckForUpdateAsync(manual: false);
         };
         updater.Start();
+        // 常驻轮询：每 30 分钟静默检查一次（服务端发布新版后客户端最多 30 分钟内提示）
+        var poller = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
+        poller.Tick += async (_, _) => await CheckForUpdateAsync(manual: false);
+        poller.Start();
     }
 
     /// <summary>检查更新：自动模式静默，手动模式带反馈。有更新时引导下载并重启安装。</summary>
@@ -144,7 +148,12 @@ public partial class App : Application
         }
 
         Log.Info($"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）");
-        var answer = MessageBox.Show($"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）。\n是否下载并安装？", "发现更新",
+        // 拉取更新简介（失败/为空则弹窗不带简介，不阻断更新流程）
+        var notes = await Updater.GetNotesAsync();
+        var msg = $"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）。\n" +
+            (string.IsNullOrEmpty(notes) ? "" : $"\n【更新内容】\n{notes}\n") +
+            "\n是否下载并安装？";
+        var answer = MessageBox.Show(msg, "发现更新",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (answer != MessageBoxResult.Yes)
             return;
