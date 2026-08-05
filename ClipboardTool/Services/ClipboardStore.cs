@@ -245,20 +245,22 @@ public sealed class ClipboardStore : IDisposable
 
     public void Clear()
     {
+        // 清空历史但保留置顶条目（与 Trim 的置顶保护一致）
+        var files = new List<string>();
+        using (var sel = _conn.CreateCommand())
+        {
+            sel.CommandText = "SELECT content FROM entries WHERE pinned = 0 AND type = 'image'";
+            using var reader = sel.ExecuteReader();
+            while (reader.Read())
+                files.Add(reader.GetString(0));
+        }
+
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM entries";
+        cmd.CommandText = "DELETE FROM entries WHERE pinned = 0";
         cmd.ExecuteNonQuery();
 
-        // 清理所有图片文件
-        try
-        {
-            if (Directory.Exists(_imagesDir))
-                foreach (var f in Directory.GetFiles(_imagesDir))
-                    TryDeleteFile(f);
-        }
-        catch (IOException)
-        {
-        }
+        foreach (var f in files)
+            TryDeleteFile(f);
     }
 
     private static void TryDeleteFile(string? path)

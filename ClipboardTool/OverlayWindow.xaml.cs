@@ -89,6 +89,12 @@ public partial class OverlayWindow : Window
         // 全物理像素坐标系：cursor/WorkingArea 是物理像素，窗口实际尺寸按当前 DPI 换算成物理像素，
         // 用 SetWindowPos 直接定位，绕开 WPF Left/Top 的逻辑单位转换（不同 DPI/分辨率下精确）
         var dpi = VisualTreeHelper.GetDpi(this);
+        // 悬浮列表最大高度：手动设置值优先，否则按工作区高度 70% 自动适配；下限 240 逻辑像素。
+        // 在 UpdateLayout 前设置，SizeToContent 一次布局即得最终高度（不触发二次测量）。
+        var maxH = _settings.OverlayMaxHeight > 0
+            ? _settings.OverlayMaxHeight
+            : wa.Height * 0.7 / dpi.DpiScaleY;
+        MaxHeight = Math.Clamp(maxH, 240, wa.Height / dpi.DpiScaleY);
         double winW = ActualWidth * dpi.DpiScaleX;
         double winH = ActualHeight * dpi.DpiScaleY;
         // 窗口左上角对齐鼠标位置；超出屏幕边缘时向回校正
@@ -317,6 +323,16 @@ public partial class OverlayWindow : Window
         // 列表条目不含原图 BLOB，粘贴前取完整条目
         var full = _store.GetById(entry.Id) ?? entry;
         Paster.Paste(_monitor, full, _settings.PastePlainText);
+        RequestHide();
+    }
+
+    private void OnPastePlain(object sender, RoutedEventArgs e)
+    {
+        if (ContextEntry(sender) is not Entry entry)
+            return;
+        var full = _store.GetById(entry.Id) ?? entry;
+        // 强制纯文本：文本=内容、文件=路径、图片=尺寸信息
+        Paster.Paste(_monitor, full, plainTextOnly: true);
         RequestHide();
     }
 }

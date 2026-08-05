@@ -12,6 +12,9 @@ public sealed class Settings
     public bool AutoStart { get; set; }
     public bool PastePlainText { get; set; }
 
+    /// <summary>悬浮列表最大高度（逻辑像素，0=按屏幕工作区高度自动适配 70%）。</summary>
+    public int OverlayMaxHeight { get; set; }
+
     private string _path = "";
 
     public static Settings Load(string dataDir)

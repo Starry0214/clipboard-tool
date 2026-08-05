@@ -16,6 +16,7 @@ public partial class SettingsWindow : Window
         _settings = settings;
         HotkeyBox.Text = settings.HotkeyText;
         MaxBox.Text = settings.MaxEntries.ToString();
+        OverlayHeightBox.Text = settings.OverlayMaxHeight.ToString();
         AutoStartCheck.IsChecked = settings.AutoStart;
         PlainCheck.IsChecked = settings.PastePlainText;
 
@@ -146,9 +147,17 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        if (!int.TryParse(OverlayHeightBox.Text, out var overlayH) || overlayH < 0 || overlayH > 2000)
+        {
+            MessageBox.Show(this, "悬浮列表高度须为 0 ~ 2000 的整数（0 表示自动）。", "设置",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         _settings.UseWinV = useWinV;
         _settings.HotkeyText = HotkeyBox.Text;
         _settings.MaxEntries = max;
+        _settings.OverlayMaxHeight = overlayH;
         _settings.AutoStart = AutoStartCheck.IsChecked == true;
         _settings.PastePlainText = PlainCheck.IsChecked == true;
         _settings.Save();

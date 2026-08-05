@@ -15,6 +15,7 @@
 - **剪贴板粘贴必须用 Win32 原生 API**（`Services/Paster.cs`：OpenClipboard/EmptyClipboard/SetClipboardData + CF_UNICODETEXT/CF_HDROP/CF_DIB，后台 STA 线程执行，UI 零阻塞）。**不要改回 `System.Windows.Clipboard`**——WPF 实现依赖 OLE 消息泵，后台线程用会静默失败、Flush 失败还会滞留锁死剪贴板（本会话血泪）。
 - **数据目录在 `%LocalAppData%\ClipboardTool`**（`App.DataDir`），与 exe 分离；启动时自动把旧版 exe 同目录 `data/` 迁移过去。更新/覆盖程序不丢数据。
 - **图片文件化存储**：原图存 `data/images/*.png`（条目 Content=文件路径），缩略图存 BLOB。**列表查询（`Query`）不含原图**——粘贴/预览前必须 `store.GetById(id)` 取完整条目（含从文件读出的 Image），否则图片会退化成粘贴尺寸文本。
+- **清空保留置顶**：`ClipboardStore.Clear()` 与 `Trim()` 一样有置顶保护（`WHERE pinned = 0`），清空只删非置顶条目，置顶条目及其图片文件保留。确认对话框文案明确提示"置顶条目将保留"。
 - **热键双轨**：Win 修饰键（如 Win+V）走低级键盘钩子 `KeyboardHook`（系统硬绑定热键 RegisterHotKey 会失败）；其他修饰键走 RegisterHotKey。设置里 `UseWinV` 勾选项优先。
 - **悬浮列表窗口复用**：所有关闭路径用 `Hide()`，**绝不能用 `Close()`**（WPF 窗口 Close 后不能再 Show）。
 - **Overlay 弹出位置用物理像素 + `SetWindowPos`**（cursor/WorkingArea 是物理像素，WPF Left/Top 是逻辑单位，直接赋值会在非 100% DPI 下偏移）。

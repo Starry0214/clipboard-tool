@@ -10,7 +10,6 @@
         ResizeMode="NoResize"
         Width="440"
         SizeToContent="Height"
-        MaxHeight="520"
         Focusable="True"
         SnapsToDevicePixels="True">
     <Window.Resources>
@@ -166,6 +165,7 @@
                                     <Separator/>
                                     <MenuItem Header="预览" Click="OnPreview"/>
                                     <MenuItem Header="粘贴" Click="OnPaste"/>
+                                    <MenuItem Header="粘贴为纯文本" Click="OnPastePlain"/>
                                 </ContextMenu>
                             </Grid.ContextMenu>
                             <!-- 图片条目：缩略图 -->

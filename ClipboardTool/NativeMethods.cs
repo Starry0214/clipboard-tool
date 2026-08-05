@@ -56,6 +56,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern bool CloseClipboard();
 
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    internal static extern uint RegisterClipboardFormat(string lpszFormat);
+
     internal const uint CF_UNICODETEXT = 13;
     internal const uint CF_HDROP = 15;
     internal const uint CF_DIB = 8;

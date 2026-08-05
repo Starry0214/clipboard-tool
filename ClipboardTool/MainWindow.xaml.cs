@@ -89,7 +89,7 @@ public partial class MainWindow : Window
 
     private void OnClear(object sender, RoutedEventArgs e)
     {
-        var result = MessageBox.Show(this, "确定要清空全部历史记录吗？", "清空历史",
+        var result = MessageBox.Show(this, "确定要清空全部历史记录吗？置顶条目将保留。", "清空历史",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes)
             return;

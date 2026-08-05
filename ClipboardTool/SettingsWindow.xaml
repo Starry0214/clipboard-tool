@@ -32,6 +32,10 @@
                 <TextBlock Text="范围 10 ~ 10000" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
                 <TextBox x:Name="MaxBox" Style="{StaticResource FluentTextBox}" Margin="0,0,0,16"/>
 
+                <TextBlock Text="悬浮列表高度" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,6"/>
+                <TextBlock Text="像素，0 = 按屏幕高度自动适配（70%）" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
+                <TextBox x:Name="OverlayHeightBox" Style="{StaticResource FluentTextBox}" Margin="0,0,0,16"/>
+
                 <TextBlock Text="启动与粘贴选项" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,8"/>
                 <Border Style="{StaticResource CardBorder}" Margin="0,0,0,8">
                     <StackPanel Margin="4">
