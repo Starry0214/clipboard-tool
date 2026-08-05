@@ -1,5 +1,10 @@
 # 日志 + 一键上报 设计文档
 
+> [!NOTE]
+> This document may not reflect the current implementation.
+> See the final report for up-to-date state:
+> [Final Report](../reports/logging.md)
+
 日期：2026-08-05
 状态：已确认（用户批准设计）
 目标版本：v1.3.0
