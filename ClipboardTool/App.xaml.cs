@@ -174,6 +174,27 @@ public partial class App : Application
         }
 
         Log.Info($"下载完成 v{latest}，耗时 {sw.Elapsed.TotalSeconds:F1}s");
+
+        // 引导器解压模式：下载到的是新引导器，替换 launcher（不替换自身）
+        if (Updater.IsLauncherMode)
+        {
+            var launcher = Updater.LauncherPath;
+            if (string.IsNullOrEmpty(launcher) || !File.Exists(launcher))
+            {
+                MessageBox.Show("未找到引导器文件，请从下载目录重新运行 剪贴板助手.exe。", "更新失败",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var confirm2 = MessageBox.Show("更新已下载完成，重启后生效（新版本将在下次启动时应用）。是否立即重启？", "更新就绪",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm2 != MessageBoxResult.Yes)
+                return;
+            Log.Info("用户确认重启（引导器模式）");
+            Updater.Apply(newExe, launcher); // 用 bat 覆盖引导器并重启引导器
+            Shutdown();
+            return;
+        }
+
         var confirm = MessageBox.Show("更新已下载完成，是否立即重启以完成更新？", "更新就绪",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)

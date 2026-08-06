@@ -17,6 +17,40 @@ public static class Updater
     public static string CurrentVersion { get; } =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
 
+    /// <summary>
+    /// 是否以"引导器解压模式"运行（exe 位于 %LocalAppData%\ClipboardToolApp\）。
+    /// 是 → 更新应替换引导器（launcher）；否 → 老架构自包含直跑，更新替换自身。
+    /// </summary>
+    public static bool IsLauncherMode
+    {
+        get
+        {
+            var exe = Environment.ProcessPath ?? "";
+            var appDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardToolApp");
+            return exe.StartsWith(appDir, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>引导器路径（由引导器启动时写入 launcher_path.txt）。</summary>
+    public static string? LauncherPath
+    {
+        get
+        {
+            try
+            {
+                var f = Path.Combine(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardToolApp"),
+                    "launcher_path.txt");
+                return File.Exists(f) ? File.ReadAllText(f).Trim() : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+    }
+
     /// <summary>查询服务器上的最新版本号。网络不可达或解析失败返回 null。</summary>
     public static async Task<string?> CheckAsync()
     {

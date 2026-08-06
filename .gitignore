@@ -8,4 +8,4 @@ publish/
 *.db-wal
 .tools/
 
-ClipboardTool/Launcher/embedded/
+Launcher/embedded/

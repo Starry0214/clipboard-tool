@@ -6,15 +6,20 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 
 // 剪贴板助手单文件引导器（NativeAOT，WinExe 无控制台窗口）：
-// 1. 解压内嵌主程序到 %LocalAppData%\ClipboardToolApp\
-// 2. 检测 .NET 9 桌面运行时，缺失则从更新服务器下载并静默安装
-// 3. 启动主程序（优先启动被自动更新替换过的新版）
+// 1. 自更新：检查服务器 version.txt，若比自身新则下载新引导器覆盖自己并重启
+// 2. 解压内嵌主程序到 %LocalAppData%\ClipboardToolApp\（内嵌版本比已解压版新才覆盖）
+// 3. 记录自身路径到 launcher_path.txt（供主程序更新引导器用）
+// 4. 检测 .NET 9 桌面运行时，缺失则从更新服务器下载并静默安装
+// 5. 启动主程序
 
 internal static class Program
 {
     private const string EmbeddedName = "ClipboardToolApp.exe";
     private const string AppDirName = "ClipboardToolApp";
     private const string MainExeName = "ClipboardTool.exe";
+    private const string LauncherPathFile = "launcher_path.txt";
+    private const string VersionFile = "version.txt";
+    private const string UpdateBaseUrl = "https://code.starry0214.one/updates";
     private const string InstallerUrl = "https://code.starry0214.one/updates/windowsdesktop-runtime-9.0.17-win-x64.exe";
     private const string InstallerName = "windowsdesktop-runtime-9.0.17-win-x64.exe";
 
@@ -28,6 +33,10 @@ internal static class Program
     private const uint MB_ICONQUESTION = 0x00000020;
     private const uint IDYES = 6;
 
+    /// <summary>引导器自身版本（与 csproj &lt;Version&gt; 及内嵌主程序版本同步）。</summary>
+    private static readonly Version SelfVersion =
+        Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
+
     private static int Main()
     {
         var appDir = Path.Combine(
@@ -37,11 +46,28 @@ internal static class Program
             Directory.CreateDirectory(appDir);
             var mainExe = Path.Combine(appDir, MainExeName);
 
-            // 解压目录已有 exe（可能被自动更新替换为新版）→ 直接用，不覆盖；
-            // 仅首次或缺失时解压内嵌版
-            if (!File.Exists(mainExe))
-                ExtractEmbedded(mainExe);
+            // ① 自更新：服务器版本比自身新 → 下载新引导器覆盖自己并重启
+            if (TrySelfUpdate(appDir))
+                return 0; // 自更新已触发重启，本进程退出
 
+            // ② 解压内嵌主程序（内嵌版本比已解压版新才覆盖，保留被自动更新替换过的新版）
+            var extractedVer = ReadVersionFile(Path.Combine(appDir, VersionFile));
+            if (!File.Exists(mainExe) || extractedVer is null || extractedVer < SelfVersion)
+            {
+                ExtractEmbedded(mainExe);
+                WriteVersionFile(Path.Combine(appDir, VersionFile), SelfVersion.ToString(3));
+            }
+
+            // ③ 记录引导器自身路径，供主程序"检查更新"覆盖引导器用
+            try
+            {
+                File.WriteAllText(Path.Combine(appDir, LauncherPathFile), Environment.ProcessPath ?? "");
+            }
+            catch (Exception)
+            {
+            }
+
+            // ④ 运行时检测
             if (!RuntimeInstalled())
             {
                 var answer = MessageBoxW(IntPtr.Zero,
@@ -53,6 +79,7 @@ internal static class Program
                     return 1;
             }
 
+            // ⑤ 启动主程序
             Process.Start(new ProcessStartInfo
             {
                 FileName = mainExe,
@@ -68,6 +95,50 @@ internal static class Program
         }
     }
 
+    /// <summary>检查服务器是否有更新的引导器；有则下载并覆盖自己（bat 延迟替换），返回 true。</summary>
+    private static bool TrySelfUpdate(string appDir)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var text = http.GetStringAsync($"{UpdateBaseUrl}/{VersionFile}").GetAwaiter().GetResult();
+            if (!Version.TryParse(text.Trim().TrimStart('v'), out var latest) || latest <= SelfVersion)
+                return false;
+
+            // 下载新版引导器
+            var newLauncher = Path.Combine(appDir, "launcher.new.exe");
+            using (var resp = http.GetAsync($"{UpdateBaseUrl}/ClipboardTool.exe").GetAwaiter().GetResult())
+            {
+                resp.EnsureSuccessStatusCode();
+                using var fs = new FileStream(newLauncher, FileMode.Create, FileAccess.Write);
+                resp.Content.CopyToAsync(fs).GetAwaiter().GetResult();
+            }
+
+            // bat：等本进程退出 → 覆盖自身 → 重启（中文路径用 chcp 65001 + UTF-8）
+            var self = Environment.ProcessPath ?? throw new InvalidOperationException("无法确定自身路径");
+            var bat = Path.Combine(Path.GetTempPath(), $"clipboard_launcher_updater_{Guid.NewGuid():N}.bat");
+            File.WriteAllText(bat,
+                $"@echo off\r\n" +
+                $"chcp 65001 >nul\r\n" +
+                $"timeout /t 3 /nobreak >nul\r\n" +
+                $"copy /y \"{newLauncher}\" \"{self}\" >nul\r\n" +
+                $"del \"{newLauncher}\" >nul 2>&1\r\n" +
+                $"start \"\" \"{self}\"\r\n" +
+                $"del \"%~f0\"\r\n", new System.Text.UTF8Encoding(false));
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = bat,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                UseShellExecute = true,
+            });
+            return true;
+        }
+        catch (Exception)
+        {
+            return false; // 网络/解析失败静默，不影响正常启动
+        }
+    }
+
     /// <summary>解压内嵌主程序到指定路径。</summary>
     private static void ExtractEmbedded(string target)
     {
@@ -75,6 +146,31 @@ internal static class Program
             ?? throw new InvalidOperationException("内嵌主程序缺失");
         using (var fs = new FileStream(target, FileMode.Create, FileAccess.Write))
             stream.CopyTo(fs);
+    }
+
+    private static Version? ReadVersionFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return null;
+            return Version.TryParse(File.ReadAllText(path).Trim(), out var v) ? v : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static void WriteVersionFile(string path, string version)
+    {
+        try
+        {
+            File.WriteAllText(path, version);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private static bool RuntimeInstalled()
