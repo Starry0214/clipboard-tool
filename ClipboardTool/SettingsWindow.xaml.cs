@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
         MaxBox.Text = settings.MaxEntries.ToString();
         OverlayHeightBox.Text = settings.OverlayMaxHeight.ToString();
         AutoStartCheck.IsChecked = settings.AutoStart;
+        StartMenuCheck.IsChecked = settings.StartMenuShortcut;
         PlainCheck.IsChecked = settings.PastePlainText;
 
         WinVCheck.IsChecked = settings.UseWinV;
@@ -159,6 +160,7 @@ public partial class SettingsWindow : Window
         _settings.MaxEntries = max;
         _settings.OverlayMaxHeight = overlayH;
         _settings.AutoStart = AutoStartCheck.IsChecked == true;
+        _settings.StartMenuShortcut = StartMenuCheck.IsChecked == true;
         _settings.PastePlainText = PlainCheck.IsChecked == true;
         _settings.Save();
         Applied = true;

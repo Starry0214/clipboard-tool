@@ -11,6 +11,7 @@ public sealed class Settings
     public int MaxEntries { get; set; } = 500;
     public bool AutoStart { get; set; }
     public bool PastePlainText { get; set; }
+    public bool StartMenuShortcut { get; set; }
 
     /// <summary>悬浮列表最大高度（逻辑像素，0=按屏幕工作区高度自动适配 70%）。</summary>
     public int OverlayMaxHeight { get; set; }
@@ -90,6 +91,33 @@ public sealed class Settings
                 key.DeleteValue("ClipboardTool", false);
         }
         catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>创建/删除开始菜单快捷方式（%AppData%\...\Start Menu\Programs\剪贴板助手.lnk）。</summary>
+    public void ApplyStartMenuShortcut()
+    {
+        try
+        {
+            var startMenuDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), "Programs");
+            var lnk = Path.Combine(startMenuDir, "剪贴板助手.lnk");
+            if (!StartMenuShortcut)
+            {
+                if (File.Exists(lnk))
+                    File.Delete(lnk);
+                return;
+            }
+            Directory.CreateDirectory(startMenuDir);
+            var exe = Environment.ProcessPath ?? "";
+            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+            dynamic sc = shell.CreateShortcut(lnk);
+            sc.TargetPath = exe;
+            sc.WorkingDirectory = Path.GetDirectoryName(exe) ?? "";
+            sc.IconLocation = $"{exe},0";
+            sc.Save();
+        }
+        catch (Exception)
         {
         }
     }

@@ -288,6 +288,7 @@ public partial class App : Application
         _store.MaxEntries = _settings.MaxEntries;
         _store.Trim();
         _settings.ApplyAutoStart();
+        _settings.ApplyStartMenuShortcut();
         RegisterHotkey();
     }
 

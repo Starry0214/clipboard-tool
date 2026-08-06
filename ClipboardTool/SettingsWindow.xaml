@@ -40,6 +40,7 @@
                 <Border Style="{StaticResource CardBorder}" Margin="0,0,0,8">
                     <StackPanel Margin="4">
                         <CheckBox x:Name="AutoStartCheck" Content="开机自动启动" Style="{StaticResource FluentCheckBox}"/>
+                        <CheckBox x:Name="StartMenuCheck" Content="添加到开始菜单" Style="{StaticResource FluentCheckBox}" Margin="0,6,0,0"/>
                         <CheckBox x:Name="PlainCheck" Content="粘贴时默认去格式（纯文本）" Style="{StaticResource FluentCheckBox}" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
