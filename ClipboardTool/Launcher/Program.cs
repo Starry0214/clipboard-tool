@@ -3,8 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
-// 剪贴板助手单文件引导器（NativeAOT）：
+// 剪贴板助手单文件引导器（NativeAOT，WinExe 无控制台窗口）：
 // 1. 解压内嵌主程序到 %LocalAppData%\ClipboardToolApp\
 // 2. 检测 .NET 9 桌面运行时，缺失则从更新服务器下载并静默安装
 // 3. 启动主程序（优先启动被自动更新替换过的新版）
@@ -16,6 +17,16 @@ internal static class Program
     private const string MainExeName = "ClipboardTool.exe";
     private const string InstallerUrl = "https://code.starry0214.one/updates/windowsdesktop-runtime-9.0.17-win-x64.exe";
     private const string InstallerName = "windowsdesktop-runtime-9.0.17-win-x64.exe";
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
+
+    private const uint MB_OK = 0x00000000;
+    private const uint MB_ICONWARNING = 0x00000030;
+    private const uint MB_ICONERROR = 0x00000010;
+    private const uint MB_YESNO = 0x00000004;
+    private const uint MB_ICONQUESTION = 0x00000020;
+    private const uint IDYES = 6;
 
     private static int Main()
     {
@@ -33,11 +44,13 @@ internal static class Program
 
             if (!RuntimeInstalled())
             {
-                Console.WriteLine("未检测到 .NET 9 桌面运行时，需要先安装（约 60MB）。");
-                Console.WriteLine("将从更新服务器下载并安装，请稍候…");
+                var answer = MessageBoxW(IntPtr.Zero,
+                    "剪贴板助手需要 .NET 9 桌面运行时才能运行（约 60MB）。\n\n是否现在从更新服务器下载并安装？",
+                    "剪贴板助手", MB_YESNO | MB_ICONQUESTION);
+                if (answer != IDYES)
+                    return 1;
                 if (!InstallRuntime(appDir))
                     return 1;
-                Console.WriteLine("运行时安装完成。");
             }
 
             Process.Start(new ProcessStartInfo
@@ -50,9 +63,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"启动失败：{ex.Message}");
-            Console.WriteLine("按任意键退出…");
-            Console.ReadKey();
+            MessageBoxW(IntPtr.Zero, $"启动失败：{ex.Message}", "剪贴板助手", MB_OK | MB_ICONERROR);
             return 1;
         }
     }
@@ -96,14 +107,15 @@ internal static class Program
         {
             if (!File.Exists(installer))
             {
-                Console.WriteLine("正在下载运行时安装包…");
+                MessageBoxW(IntPtr.Zero, "正在从更新服务器下载 .NET 9 运行时安装包（约 60MB）…",
+                    "剪贴板助手", MB_OK);
                 using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
                 using var resp = http.GetAsync(InstallerUrl).GetAwaiter().GetResult();
                 resp.EnsureSuccessStatusCode();
                 using var fs = new FileStream(installer, FileMode.Create, FileAccess.Write);
                 resp.Content.CopyToAsync(fs).GetAwaiter().GetResult();
             }
-            Console.WriteLine("正在安装运行时（如弹出 UAC 请允许）…");
+            MessageBoxW(IntPtr.Zero, "正在安装运行时（如弹出 UAC 请允许）…", "剪贴板助手", MB_OK);
             using (var p = Process.Start(new ProcessStartInfo(installer, "/install /quiet /norestart")
             {
                 UseShellExecute = true,
@@ -115,8 +127,8 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"下载/安装失败：{ex.Message}");
-            Console.WriteLine($"请手动下载安装：{InstallerUrl}");
+            MessageBoxW(IntPtr.Zero, $"下载/安装失败：{ex.Message}\n\n请手动下载安装：\n{InstallerUrl}",
+                "剪贴板助手", MB_OK | MB_ICONERROR);
             return false;
         }
     }
