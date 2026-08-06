@@ -156,7 +156,7 @@ public partial class App : Application
         {
             Log.Error("检查更新失败：无法连接更新服务器");
             if (manual)
-                MessageBox.Show("检查更新失败：无法连接更新服务器。", "检查更新",
+                MessageBox.Show($"检查更新失败：无法连接更新服务器（当前版本 v{Updater.CurrentVersion}）。", "检查更新",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }

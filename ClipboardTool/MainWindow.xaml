@@ -144,13 +144,17 @@
             </ListBox>
         </Border>
 
-        <!-- 底部操作栏 -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="置顶" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnPin"/>
-            <Button Content="删除" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnDelete"/>
-            <Button Content="清空" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnClear"/>
-            <Button Content="设置" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnSettings"/>
-            <Button Content="刷新" Style="{StaticResource FluentButton}" Padding="12,6" Click="OnRefresh"/>
-        </StackPanel>
+        <!-- 底部操作栏：左侧当前版本号，右侧操作按钮 -->
+        <Grid Grid.Row="2">
+            <TextBlock x:Name="VersionText" FontSize="11" Foreground="#999999"
+                       VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="置顶" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnPin"/>
+                <Button Content="删除" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnDelete"/>
+                <Button Content="清空" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnClear"/>
+                <Button Content="设置" Style="{StaticResource FluentButtonSecondary}" Margin="0,0,8,0" Padding="12,6" Click="OnSettings"/>
+                <Button Content="刷新" Style="{StaticResource FluentButton}" Padding="12,6" Click="OnRefresh"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

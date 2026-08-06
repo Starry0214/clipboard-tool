@@ -15,6 +15,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _store = store;
         _settings = settings;
+        VersionText.Text = $"v{Updater.CurrentVersion}";
         SearchBox.TextChanged += (_, _) => Refresh();
         FilterAll.IsChecked = true;
         // 双击：图片→大图预览；文本→全文预览；文件→用默认程序打开
