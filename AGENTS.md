@@ -32,6 +32,7 @@
 ## 更新与发布流程
 
 - 更新源：域名 `https://code.starry0214.one/updates/`（`version.txt` + `ClipboardTool.exe` + 运行时安装包，SSH：`ssh -i ~/.ssh/id_ed25519 -p 1443 root@107.175.228.83`，nginx 配置 `/www/server/panel/vhost/nginx/updates.conf`）。
+- **notes.txt 只写当前版本更新内容，不累加历史**（"发现更新"弹窗会全文展示 notes.txt，`App.xaml.cs` 直接拼接）。
 - 发新版本（单文件引导器架构）：改主项目 csproj `<Version>` + Launcher csproj `<Version>` → 杀进程 → 主项目 `dotnet publish -c Release`（需代理）→ 复制主程序 exe 到 `Launcher/embedded/ClipboardToolApp.exe` → Launcher `dotnet publish -c Release`（AOT，产物 `Launcher/bin/Release/net9.0/win-x64/publish/剪贴板助手.exe`）→ 重命名上传为 `ClipboardTool.exe` 到 `/var/www/updates/` → 更新 `version.txt`。
 
 ## 测试
