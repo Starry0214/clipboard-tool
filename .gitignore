@@ -7,3 +7,5 @@ publish/
 *.db-shm
 *.db-wal
 .tools/
+
+ClipboardTool/Launcher/embedded/
