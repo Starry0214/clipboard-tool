@@ -13,6 +13,9 @@ public static class Updater
     /// <summary>更新服务器地址（code.starry0214.one nginx 静态服务，走 HTTPS）。</summary>
     public const string UpdateBaseUrl = "https://code.starry0214.one/updates";
 
+    /// <summary>镜像源：域名 HTTPS 优先，IP HTTP 兜底（域名走境外中继，部分政务网连不上）。</summary>
+    public static readonly string[] BaseUrls = [UpdateBaseUrl, "http://107.175.228.83:8080"];
+
     /// <summary>当前程序版本（来自程序集版本，如 1.2.0）。</summary>
     public static string CurrentVersion { get; } =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
@@ -51,96 +54,114 @@ public static class Updater
         }
     }
 
-    /// <summary>查询服务器上的最新版本号。网络不可达或解析失败返回 null。</summary>
+    /// <summary>查询服务器上的最新版本号。所有镜像均不可达或解析失败返回 null。</summary>
     public static async Task<string?> CheckAsync()
     {
         // 慢网络（如政务网）TLS 握手可能超 10s，放宽总超时；连接阶段 15s 快速失败
-        using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
-        {
-            Timeout = TimeSpan.FromSeconds(25),
-        };
-        try
-        {
-            var text = await http.GetStringAsync($"{UpdateBaseUrl}/version.txt");
-            var v = text.Trim().TrimStart('v');
-            return string.IsNullOrEmpty(v) ? null : v;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
-    public static bool IsNewer(string latest) =>
-        Version.TryParse(latest, out var v) && v > Version.Parse(CurrentVersion);
-
-    /// <summary>拉取服务器上的更新简介（notes.txt，≤8KB）；失败或为空返回 null。</summary>
-    public static async Task<string?> GetNotesAsync()
-    {
-        try
+        foreach (var baseUrl in BaseUrls)
         {
             using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
             {
                 Timeout = TimeSpan.FromSeconds(25),
             };
-            var text = await http.GetStringAsync($"{UpdateBaseUrl}/notes.txt");
-            return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            try
+            {
+                var text = await http.GetStringAsync($"{baseUrl}/version.txt");
+                var v = text.Trim().TrimStart('v');
+                return string.IsNullOrEmpty(v) ? null : v;
+            }
+            catch (Exception)
+            {
+                // 该镜像不可达，换下一个
+            }
         }
-        catch (Exception)
+        return null;
+    }
+
+    public static bool IsNewer(string latest) =>
+        Version.TryParse(latest, out var v) && v > Version.Parse(CurrentVersion);
+
+    /// <summary>拉取服务器上的更新简介（notes.txt，≤8KB）；全部失败或为空返回 null。</summary>
+    public static async Task<string?> GetNotesAsync()
+    {
+        foreach (var baseUrl in BaseUrls)
         {
-            return null;
+            try
+            {
+                using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
+                {
+                    Timeout = TimeSpan.FromSeconds(25),
+                };
+                var text = await http.GetStringAsync($"{baseUrl}/notes.txt");
+                return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            }
+            catch (Exception)
+            {
+                // 该镜像不可达，换下一个
+            }
         }
+        return null;
     }
 
     /// <summary>下载进度：已下载字节 / 总字节（未知为 0）/ 瞬时速度（字节每秒）。</summary>
     public readonly record struct DownloadProgress(long BytesReceived, long TotalBytes, double BytesPerSecond);
 
-    /// <summary>下载最新版 exe 到数据目录 updates/ 下，返回本地路径；失败返回 null。</summary>
+    /// <summary>下载最新版 exe 到数据目录 updates/ 下，返回本地路径；所有镜像均失败返回 null。</summary>
     public static async Task<string?> DownloadAsync(string dataDir, IProgress<DownloadProgress>? progress = null)
+    {
+        var dir = Path.Combine(dataDir, "updates");
+        Directory.CreateDirectory(dir);
+        var dest = Path.Combine(dir, "ClipboardTool.new.exe");
+        foreach (var baseUrl in BaseUrls)
+        {
+            try
+            {
+                return await DownloadFrom(baseUrl, dest, progress);
+            }
+            catch (Exception)
+            {
+                // 该镜像不可达，换下一个
+            }
+        }
+        return null;
+    }
+
+    private static async Task<string> DownloadFrom(string baseUrl, string dest,
+        IProgress<DownloadProgress>? progress)
     {
         using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
         {
             Timeout = TimeSpan.FromMinutes(10),
         };
-        try
+        using var response = await http.GetAsync($"{baseUrl}/ClipboardTool.exe",
+            HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+        var total = response.Content.Headers.ContentLength ?? 0;
+        await using var src = await response.Content.ReadAsStreamAsync();
+        await using var dst = File.Create(dest);
+        var buffer = new byte[81920];
+        long received = 0;
+        var sw = Stopwatch.StartNew();
+        long lastBytes = 0;
+        var lastTick = sw.Elapsed;
+        while (true)
         {
-            var dir = Path.Combine(dataDir, "updates");
-            Directory.CreateDirectory(dir);
-            var dest = Path.Combine(dir, "ClipboardTool.new.exe");
-            using var response = await http.GetAsync($"{UpdateBaseUrl}/ClipboardTool.exe",
-                HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-            var total = response.Content.Headers.ContentLength ?? 0;
-            await using var src = await response.Content.ReadAsStreamAsync();
-            await using var dst = File.Create(dest);
-            var buffer = new byte[81920];
-            long received = 0;
-            var sw = Stopwatch.StartNew();
-            long lastBytes = 0;
-            var lastTick = sw.Elapsed;
-            while (true)
+            var n = await src.ReadAsync(buffer);
+            if (n == 0)
+                break;
+            await dst.WriteAsync(buffer.AsMemory(0, n));
+            received += n;
+            var now = sw.Elapsed;
+            if (progress is not null && now - lastTick >= TimeSpan.FromMilliseconds(250))
             {
-                var n = await src.ReadAsync(buffer);
-                if (n == 0)
-                    break;
-                await dst.WriteAsync(buffer.AsMemory(0, n));
-                received += n;
-                var now = sw.Elapsed;
-                if (progress is not null && now - lastTick >= TimeSpan.FromMilliseconds(250))
-                {
-                    var speed = (received - lastBytes) / (now - lastTick).TotalSeconds;
-                    lastBytes = received;
-                    lastTick = now;
-                    progress.Report(new DownloadProgress(received, total, speed));
-                }
+                var speed = (received - lastBytes) / (now - lastTick).TotalSeconds;
+                lastBytes = received;
+                lastTick = now;
+                progress.Report(new DownloadProgress(received, total, speed));
             }
-            progress?.Report(new DownloadProgress(received, total, 0));
-            return dest;
         }
-        catch (Exception)
-        {
-            return null;
-        }
+        progress?.Report(new DownloadProgress(received, total, 0));
+        return dest;
     }
 
     /// <summary>通过批处理脚本替换当前 exe 并重启（当前进程先退出释放文件锁）。</summary>

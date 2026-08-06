@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 // 剪贴板助手单文件引导器（NativeAOT，WinExe 无控制台窗口）：
 // 1. 自更新：检查服务器 version.txt，若比自身新则下载新引导器覆盖自己并重启
@@ -23,8 +24,12 @@ internal static class Program
     private const string LauncherPathFile = "launcher_path.txt";
     private const string VersionFile = "version.txt";
     private const string UpdateBaseUrl = "https://code.starry0214.one/updates";
+    private const string FallbackBaseUrl = "http://107.175.228.83:8080";
     private const string InstallerUrl = "https://code.starry0214.one/updates/windowsdesktop-runtime-9.0.17-win-x64.exe";
     private const string InstallerName = "windowsdesktop-runtime-9.0.17-win-x64.exe";
+
+    /// <summary>镜像源：域名 HTTPS 优先，IP HTTP 兜底（域名走境外中继，部分政务网连不上）。</summary>
+    private static readonly string[] BaseUrls = [UpdateBaseUrl, FallbackBaseUrl];
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
@@ -59,6 +64,20 @@ internal static class Program
                 return true;
             });
             return ok ? 0 : 1;
+        }
+
+        // 测试钩子：首个镜像设为不可达地址，验证自动回退到 IP 直连镜像
+        if (args.Contains("--test-fallback", StringComparer.Ordinal))
+        {
+            try
+            {
+                var text = GetText(VersionFile, ["http://127.0.0.1:1", FallbackBaseUrl]);
+                return text.Contains("1.3.6", StringComparison.Ordinal) ? 0 : 2;
+            }
+            catch (Exception)
+            {
+                return 3;
+            }
         }
 
         var appDir = Path.Combine(
@@ -150,36 +169,61 @@ internal static class Program
     private static HttpClient CreateClient(TimeSpan timeout) =>
         new(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(10) }) { Timeout = timeout };
 
-    /// <summary>从更新服务器取文本；失败抛异常。</summary>
-    private static string GetText(string path)
+    /// <summary>按镜像顺序取文本，全部失败抛出最后一次异常。</summary>
+    private static string GetText(string path, string[]? mirrors = null)
     {
         // 慢网络 TLS 握手可能超 10s，放宽到 25s（连接阶段由 CreateClient 的 10s ConnectTimeout 快速失败）
-        using var http = CreateClient(TimeSpan.FromSeconds(25));
-        return http.GetStringAsync($"{UpdateBaseUrl}/{path}").GetAwaiter().GetResult();
+        Exception? last = null;
+        foreach (var baseUrl in mirrors ?? BaseUrls)
+        {
+            try
+            {
+                using var http = CreateClient(TimeSpan.FromSeconds(25));
+                return http.GetStringAsync($"{baseUrl}/{path}").GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                last = ex;
+            }
+        }
+        throw last ?? new InvalidOperationException("网络请求失败");
     }
 
-    /// <summary>从更新服务器下载到 dest；progress 报告 (已读字节, 总字节)。</summary>
+    /// <summary>按镜像顺序下载到 dest；progress 报告 (已读字节, 总字节)。</summary>
     private static void DownloadFile(string path, string dest, Action<long, long>? progress)
     {
-        using var http = CreateClient(TimeSpan.FromMinutes(10));
-        using var resp = http.GetAsync($"{UpdateBaseUrl}/{path}", HttpCompletionOption.ResponseHeadersRead)
-            .GetAwaiter().GetResult();
-        resp.EnsureSuccessStatusCode();
-        var total = resp.Content.Headers.ContentLength ?? 0;
-        using var fs = new FileStream(dest, FileMode.Create, FileAccess.Write);
-        using var stream = resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
-        var buffer = new byte[81920];
-        long read = 0;
-        while (true)
+        Exception? last = null;
+        foreach (var baseUrl in BaseUrls)
         {
-            var n = stream.Read(buffer, 0, buffer.Length);
-            if (n <= 0)
-                break;
-            fs.Write(buffer, 0, n);
-            read += n;
-            if (total > 0)
-                progress?.Invoke(read, total);
+            try
+            {
+                using var http = CreateClient(TimeSpan.FromMinutes(10));
+                using var resp = http.GetAsync($"{baseUrl}/{path}", HttpCompletionOption.ResponseHeadersRead)
+                    .GetAwaiter().GetResult();
+                resp.EnsureSuccessStatusCode();
+                var total = resp.Content.Headers.ContentLength ?? 0;
+                using var fs = new FileStream(dest, FileMode.Create, FileAccess.Write);
+                using var stream = resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+                var buffer = new byte[81920];
+                long read = 0;
+                while (true)
+                {
+                    var n = stream.Read(buffer, 0, buffer.Length);
+                    if (n <= 0)
+                        break;
+                    fs.Write(buffer, 0, n);
+                    read += n;
+                    if (total > 0)
+                        progress?.Invoke(read, total);
+                }
+                return;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                last = ex;
+            }
         }
+        throw last ?? new InvalidOperationException("下载失败");
     }
 
     /// <summary>解压内嵌主程序到指定路径。</summary>
@@ -302,7 +346,7 @@ internal static class Program
                 }
                 if (startError is Win32Exception wex && wex.NativeErrorCode is 1223 or 5)
                 {
-                    failReason = "安装 .NET 运行时需要管理员权限。\n请在 UAC 弹窗中选择“是”后重试，或手动下载安装：\n" + InstallerUrl;
+                    failReason = "安装 .NET 运行时需要管理员权限。\n请在 UAC 弹窗中选择“是”后重试，或手动下载安装：\n" + InstallerUrl + $"\n或 {FallbackBaseUrl}/{InstallerName}";
                     return false;
                 }
                 if (startError is not null)
@@ -317,7 +361,7 @@ internal static class Program
                 if (!RuntimeInstalled())
                 {
                     var codeNote = exitCode is { } c && c != 0 ? $"（退出码 {c}）" : "";
-                    failReason = $"运行时安装未成功{codeNote}。\n\n请手动下载安装：\n{InstallerUrl}\n\n安装日志：{logPath}";
+                    failReason = $"运行时安装未成功{codeNote}。\n\n请手动下载安装：\n{InstallerUrl}\n或 {FallbackBaseUrl}/{InstallerName}\n\n安装日志：{logPath}";
                     return false;
                 }
                 reporter.Report(100);

@@ -27,11 +27,12 @@
 
 - nuget.org / github.com 直连不可达。需要时临时启动 xray 核心：`E:\VPS\vpn\v2rayN-With-Core\bin\xray\xray.exe run -config <配置>`，配置在 `.tools/`：`xray-nuget.json`（仅 nuget 域名走代理，用于 publish）、`xray-github.json`（github.com 走代理，用于 git push）。
 - **用完立即关闭 xray**（用户强规则：进程 Stop-Process + 确认 10809 端口释放）。
-- 更新服务器：域名 `https://code.starry0214.one/`（nginx 静态服务，HTTPS）。**用户规则：程序内下载/更新一律走域名，禁止 IP 直连**（`107.175.228.83` 仅用于 SSH/scp 部署管理）。
+- 更新服务器：域名 `https://code.starry0214.one/`（nginx 静态服务，HTTPS）。**程序内下载/更新：域名 HTTPS 优先，连不上自动回退 IP 直连 `http://107.175.228.83:8080`**（引导器与主程序 Updater 均已实现双镜像回退；`107.175.228.83` 同时是 SSH/scp 部署地址）。
+- **域名走境外 TCP 透传中继**（DNSPod CNAME → luvipcdn.cn，11+ 境外节点，非缓存型 CDN，响应头与源站一致）：政务网到境外节点时通时断，导致"检查更新失败/超时/下载慢"——这是架构固有特性，不是配置错误；慢节点已知 172.237.28.151（~2.7s）、172.105.209.180（~3.5s，Linode）。排查命令：`Resolve-DnsName code.starry0214.one`、逐节点 `Invoke-WebRequest https://<节点IP>/updates/version.txt -SkipCertificateCheck -Headers @{Host='code.starry0214.one'}`、服务器日志 `/www/wwwlogs/code.starry0214.one.log`。
 
 ## 更新与发布流程
 
-- 更新源：域名 `https://code.starry0214.one/updates/`（`version.txt` + `ClipboardTool.exe` + 运行时安装包，SSH：`ssh -i ~/.ssh/id_ed25519 -p 1443 root@107.175.228.83`，nginx 配置 `/www/server/panel/vhost/nginx/updates.conf`）。
+- 更新源（双镜像，代码自动回退）：域名 `https://code.starry0214.one/updates/` 优先 + IP `http://107.175.228.83:8080/` 兜底（`version.txt` + `ClipboardTool.exe` + 运行时安装包，SSH：`ssh -i ~/.ssh/id_ed25519 -p 1443 root@107.175.228.83`，nginx 配置 `/www/server/panel/vhost/nginx/updates.conf`）。
 - **notes.txt 只写当前版本更新内容，不累加历史**（"发现更新"弹窗会全文展示 notes.txt，`App.xaml.cs` 直接拼接）。
 - **发布不备份旧版**（用户规则：不再在服务器留 `*.bak`；发布前也不用在本地/桌面备份）。
 - **发布前必须做内嵌解压校验**（1.3.5 曾因内嵌版本错配翻车：引导器版本 1.3.5 但内嵌主程序是 1.3.4，用户更新后永远显示 1.3.4）：复制内嵌文件后确认其 FileVersion 与 csproj 一致；AOT 发布后用 `--no-restore`，再清空 `%LocalAppData%\ClipboardToolApp\` 运行新引导器，确认解压出的主程序版本与 version.txt 一致后才上传。
