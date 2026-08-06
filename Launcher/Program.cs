@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -219,7 +220,12 @@ internal static class Program
     {
         try
         {
-            var psi = new ProcessStartInfo("dotnet", "--list-runtimes")
+            // 必须用完整路径：无运行时机器上 PATH 是引导器启动时的旧值，装完运行时后仍解析不到 dotnet
+            var dotnet = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
+            if (!File.Exists(dotnet))
+                dotnet = "dotnet"; // 自定义安装位置（如开发机）回退 PATH
+            var psi = new ProcessStartInfo(dotnet, "--list-runtimes")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
@@ -244,6 +250,7 @@ internal static class Program
         var installer = Path.Combine(appDir, InstallerName);
         try
         {
+            var failReason = "";
             var ok = ProgressWindow.Run("剪贴板助手", "进行.NET环境安装中…", reporter =>
             {
                 // 下载安装包（缓存存在则跳过）
@@ -254,28 +261,71 @@ internal static class Program
                         (read, total) => reporter.Report((int)(read * 100 / total)));
                 }
 
-                // 静默安装（可能弹 UAC），进度条缓动表示进行中
-                reporter.Stage("正在安装运行时（如弹出 UAC 请允许）…");
-                using (var p = Process.Start(new ProcessStartInfo(installer, "/install /quiet /norestart")
+                // 静默安装（可能弹 UAC）：Process.Start 在 UAC 授权期间会阻塞调用线程，
+                // 放到独立线程执行，本线程持续动画并提示用户注意 UAC 弹窗
+                reporter.Stage("正在等待管理员授权（如弹出 UAC 请允许）…");
+                var logPath = Path.Combine(appDir, "dotnet-install.log");
+                var installDone = new ManualResetEventSlim();
+                var started = false;
+                int? exitCode = null;
+                Exception? startError = null;
+                var installThread = new Thread(() =>
                 {
-                    UseShellExecute = true,
-                }))
-                {
-                    var sw = Stopwatch.StartNew();
-                    while (p is not null && !p.HasExited)
+                    try
                     {
-                        Thread.Sleep(500);
-                        reporter.Report(Math.Min(99, 90 + (int)(sw.Elapsed.TotalSeconds / 2)));
+                        using var p = Process.Start(new ProcessStartInfo(
+                            installer, $"/install /quiet /norestart /log \"{logPath}\"")
+                        {
+                            UseShellExecute = true,
+                        });
+                        started = true; // Process.Start 返回 = 已通过 UAC，真正安装开始
+                        p?.WaitForExit();
+                        if (p is not null)
+                            exitCode = p.ExitCode;
                     }
+                    catch (Exception ex)
+                    {
+                        startError = ex;
+                    }
+                    finally
+                    {
+                        installDone.Set();
+                    }
+                });
+                installThread.Start();
+
+                var sw = Stopwatch.StartNew();
+                while (!installDone.Wait(500) && sw.Elapsed < TimeSpan.FromMinutes(6))
+                {
+                    reporter.Stage(started ? "正在安装运行时…" : "正在等待管理员授权（如弹出 UAC 请允许）…");
+                    reporter.Report(Math.Min(99, 90 + (int)(sw.Elapsed.TotalSeconds / 2)));
+                }
+                if (startError is Win32Exception wex && wex.NativeErrorCode is 1223 or 5)
+                {
+                    failReason = "安装 .NET 运行时需要管理员权限。\n请在 UAC 弹窗中选择“是”后重试，或手动下载安装：\n" + InstallerUrl;
+                    return false;
+                }
+                if (startError is not null)
+                    throw startError;
+
+                // 提权后实际安装进程可能与句柄不一致，轮询等待安装生效（最多 2 分钟）
+                while (sw.Elapsed < TimeSpan.FromMinutes(2) && !RuntimeInstalled())
+                {
+                    Thread.Sleep(500);
+                    reporter.Report(Math.Min(99, 90 + (int)(sw.Elapsed.TotalSeconds / 2)));
+                }
+                if (!RuntimeInstalled())
+                {
+                    var codeNote = exitCode is { } c && c != 0 ? $"（退出码 {c}）" : "";
+                    failReason = $"运行时安装未成功{codeNote}。\n\n请手动下载安装：\n{InstallerUrl}\n\n安装日志：{logPath}";
+                    return false;
                 }
                 reporter.Report(100);
-                return RuntimeInstalled();
+                return true;
             });
 
             if (!ok)
-                MessageBoxW(IntPtr.Zero,
-                    $"运行时安装未成功。\n\n请手动下载安装：\n{InstallerUrl}",
-                    "剪贴板助手", MB_OK | MB_ICONERROR);
+                MessageBoxW(IntPtr.Zero, failReason, "剪贴板助手", MB_OK | MB_ICONERROR);
             return ok;
         }
         catch (Exception ex)
