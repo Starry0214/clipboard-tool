@@ -27,17 +27,17 @@
 
 - nuget.org / github.com 直连不可达。需要时临时启动 xray 核心：`E:\VPS\vpn\v2rayN-With-Core\bin\xray\xray.exe run -config <配置>`，配置在 `.tools/`：`xray-nuget.json`（仅 nuget 域名走代理，用于 publish）、`xray-github.json`（github.com 走代理，用于 git push）。
 - **用完立即关闭 xray**（用户强规则：进程 Stop-Process + 确认 10809 端口释放）。
-- 更新服务器 `107.175.228.83:8080`（nginx 静态服务）国内直连可达，无需代理。
+- 更新服务器：域名 `https://code.starry0214.one/`（nginx 静态服务，HTTPS）。**用户规则：程序内下载/更新一律走域名，禁止 IP 直连**（`107.175.228.83` 仅用于 SSH/scp 部署管理）。
 
 ## 更新与发布流程
 
-- 更新源：107 服务器 `http://107.175.228.83:8080/`（`version.txt` + `ClipboardTool.exe`，SSH：`ssh -i ~/.ssh/id_ed25519 -p 1443 root@107.175.228.83`，nginx 配置 `/www/server/panel/vhost/nginx/updates.conf`）。
-- 发新版本：改 csproj `<Version>` → 杀进程 → `dotnet publish -c Release`（需代理）→ `scp` 上传 exe 到 `/var/www/updates/` → 更新 `version.txt`。产物约 72MB 自包含单文件，在 `bin/Release/net9.0-windows/win-x64/publish/`。
+- 更新源：域名 `https://code.starry0214.one/updates/`（`version.txt` + `ClipboardTool.exe` + 运行时安装包，SSH：`ssh -i ~/.ssh/id_ed25519 -p 1443 root@107.175.228.83`，nginx 配置 `/www/server/panel/vhost/nginx/updates.conf`）。
+- 发新版本（单文件引导器架构）：改主项目 csproj `<Version>` + Launcher csproj `<Version>` → 杀进程 → 主项目 `dotnet publish -c Release`（需代理）→ 复制主程序 exe 到 `Launcher/embedded/ClipboardToolApp.exe` → Launcher `dotnet publish -c Release`（AOT，产物 `Launcher/bin/Release/net9.0/win-x64/publish/剪贴板助手.exe`）→ 重命名上传为 `ClipboardTool.exe` 到 `/var/www/updates/` → 更新 `version.txt`。
 
 ## 测试
 
 - 测试脚本在 `.tools/`：`overlay_ctrl.ps1`（find/esc/enter 投递按键）、`count_visible.ps1`（窗口计数）、`enum_windows2.ps1`（窗口枚举）、`check_db.py`/`check_img.py`（SQLite 查询）。
-- 程序支持测试参数：`--show-overlay`（等效热键弹出）、`--show-main`（打开主窗口）。
+- 程序支持测试参数：`--show-overlay`（等效热键弹出）、`--show-main`（打开主窗口）。引导器支持：`--test-progress`（运行时安装进度窗口模拟）。
 - **SendKeys/SendInput 注入不触发 RegisterHotKey**；`keybd_event` 注入的按键会经过低级键盘钩子（可模拟 Win+V）。
 - 崩溃排查：`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='.NET Runtime'} -MaxEvents 5`。
 - 模拟按键/剪贴板操作前先清空 `data/`（删 db + images），避免脏数据干扰判断。

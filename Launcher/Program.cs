@@ -1,15 +1,17 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 // 剪贴板助手单文件引导器（NativeAOT，WinExe 无控制台窗口）：
 // 1. 自更新：检查服务器 version.txt，若比自身新则下载新引导器覆盖自己并重启
 // 2. 解压内嵌主程序到 %LocalAppData%\ClipboardToolApp\（内嵌版本比已解压版新才覆盖）
 // 3. 记录自身路径到 launcher_path.txt（供主程序更新引导器用）
-// 4. 检测 .NET 9 桌面运行时，缺失则从更新服务器下载并静默安装
+// 4. 检测 .NET 9 桌面运行时，缺失则直接下载并安装（进度窗口提示"进行.NET环境安装中"）
 // 5. 启动主程序
 
 internal static class Program
@@ -29,16 +31,35 @@ internal static class Program
     private const uint MB_OK = 0x00000000;
     private const uint MB_ICONWARNING = 0x00000030;
     private const uint MB_ICONERROR = 0x00000010;
-    private const uint MB_YESNO = 0x00000004;
-    private const uint MB_ICONQUESTION = 0x00000020;
-    private const uint IDYES = 6;
 
     /// <summary>引导器自身版本（与 csproj &lt;Version&gt; 及内嵌主程序版本同步）。</summary>
     private static readonly Version SelfVersion =
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
 
-    private static int Main()
+    private static int Main(string[] args)
     {
+        // 测试钩子：模拟下载+安装进度，验证进度窗口渲染与关闭（等价于主程序的 --show-overlay）
+        if (args.Contains("--test-progress", StringComparer.Ordinal))
+        {
+            var ok = ProgressWindow.Run("剪贴板助手", "进行.NET环境安装中…", reporter =>
+            {
+                for (var i = 0; i <= 100; i += 2)
+                {
+                    reporter.Report(i);
+                    Thread.Sleep(50);
+                }
+                reporter.Stage("正在安装运行时（如弹出 UAC 请允许）…");
+                for (var i = 90; i < 100; i++)
+                {
+                    reporter.Report(i);
+                    Thread.Sleep(100);
+                }
+                reporter.Report(100);
+                return true;
+            });
+            return ok ? 0 : 1;
+        }
+
         var appDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppDirName);
         try
@@ -67,17 +88,9 @@ internal static class Program
             {
             }
 
-            // ④ 运行时检测
-            if (!RuntimeInstalled())
-            {
-                var answer = MessageBoxW(IntPtr.Zero,
-                    "剪贴板助手需要 .NET 9 桌面运行时才能运行（约 60MB）。\n\n是否现在从更新服务器下载并安装？",
-                    "剪贴板助手", MB_YESNO | MB_ICONQUESTION);
-                if (answer != IDYES)
-                    return 1;
-                if (!InstallRuntime(appDir))
-                    return 1;
-            }
+            // ④ 运行时检测：缺失则直接自动安装（不再询问，进度窗口提示）
+            if (!RuntimeInstalled() && !InstallRuntime(appDir))
+                return 1;
 
             // ⑤ 启动主程序
             Process.Start(new ProcessStartInfo
@@ -100,19 +113,13 @@ internal static class Program
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var text = http.GetStringAsync($"{UpdateBaseUrl}/{VersionFile}").GetAwaiter().GetResult();
+            var text = GetText(VersionFile);
             if (!Version.TryParse(text.Trim().TrimStart('v'), out var latest) || latest <= SelfVersion)
                 return false;
 
             // 下载新版引导器
             var newLauncher = Path.Combine(appDir, "launcher.new.exe");
-            using (var resp = http.GetAsync($"{UpdateBaseUrl}/ClipboardTool.exe").GetAwaiter().GetResult())
-            {
-                resp.EnsureSuccessStatusCode();
-                using var fs = new FileStream(newLauncher, FileMode.Create, FileAccess.Write);
-                resp.Content.CopyToAsync(fs).GetAwaiter().GetResult();
-            }
+            DownloadFile("ClipboardTool.exe", newLauncher, null);
 
             // bat：等本进程退出 → 覆盖自身 → 重启（中文路径用 chcp 65001 + UTF-8）
             var self = Environment.ProcessPath ?? throw new InvalidOperationException("无法确定自身路径");
@@ -136,6 +143,41 @@ internal static class Program
         catch (Exception)
         {
             return false; // 网络/解析失败静默，不影响正常启动
+        }
+    }
+
+    /// <summary>带 10s 连接超时的 HttpClient：域名不通时快速失败，好切换到下一镜像。</summary>
+    private static HttpClient CreateClient(TimeSpan timeout) =>
+        new(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(10) }) { Timeout = timeout };
+
+    /// <summary>从更新服务器取文本；失败抛异常。</summary>
+    private static string GetText(string path)
+    {
+        using var http = CreateClient(TimeSpan.FromSeconds(10));
+        return http.GetStringAsync($"{UpdateBaseUrl}/{path}").GetAwaiter().GetResult();
+    }
+
+    /// <summary>从更新服务器下载到 dest；progress 报告 (已读字节, 总字节)。</summary>
+    private static void DownloadFile(string path, string dest, Action<long, long>? progress)
+    {
+        using var http = CreateClient(TimeSpan.FromMinutes(10));
+        using var resp = http.GetAsync($"{UpdateBaseUrl}/{path}", HttpCompletionOption.ResponseHeadersRead)
+            .GetAwaiter().GetResult();
+        resp.EnsureSuccessStatusCode();
+        var total = resp.Content.Headers.ContentLength ?? 0;
+        using var fs = new FileStream(dest, FileMode.Create, FileAccess.Write);
+        using var stream = resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+        var buffer = new byte[81920];
+        long read = 0;
+        while (true)
+        {
+            var n = stream.Read(buffer, 0, buffer.Length);
+            if (n <= 0)
+                break;
+            fs.Write(buffer, 0, n);
+            read += n;
+            if (total > 0)
+                progress?.Invoke(read, total);
         }
     }
 
@@ -196,34 +238,50 @@ internal static class Program
         }
     }
 
+    /// <summary>下载并静默安装 .NET 9 桌面运行时，全程用进度窗口提示（下载显示真实百分比，安装阶段缓动）。</summary>
     private static bool InstallRuntime(string appDir)
     {
         var installer = Path.Combine(appDir, InstallerName);
         try
         {
-            if (!File.Exists(installer))
+            var ok = ProgressWindow.Run("剪贴板助手", "进行.NET环境安装中…", reporter =>
             {
-                MessageBoxW(IntPtr.Zero, "正在从更新服务器下载 .NET 9 运行时安装包（约 60MB）…",
-                    "剪贴板助手", MB_OK);
-                using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-                using var resp = http.GetAsync(InstallerUrl).GetAwaiter().GetResult();
-                resp.EnsureSuccessStatusCode();
-                using var fs = new FileStream(installer, FileMode.Create, FileAccess.Write);
-                resp.Content.CopyToAsync(fs).GetAwaiter().GetResult();
-            }
-            MessageBoxW(IntPtr.Zero, "正在安装运行时（如弹出 UAC 请允许）…", "剪贴板助手", MB_OK);
-            using (var p = Process.Start(new ProcessStartInfo(installer, "/install /quiet /norestart")
-            {
-                UseShellExecute = true,
-            }))
-            {
-                p?.WaitForExit();
-            }
-            return RuntimeInstalled();
+                // 下载安装包（缓存存在则跳过）
+                if (!File.Exists(installer))
+                {
+                    reporter.Stage("正在下载 .NET 9 运行时（约 60MB）…");
+                    DownloadFile(InstallerName, installer,
+                        (read, total) => reporter.Report((int)(read * 100 / total)));
+                }
+
+                // 静默安装（可能弹 UAC），进度条缓动表示进行中
+                reporter.Stage("正在安装运行时（如弹出 UAC 请允许）…");
+                using (var p = Process.Start(new ProcessStartInfo(installer, "/install /quiet /norestart")
+                {
+                    UseShellExecute = true,
+                }))
+                {
+                    var sw = Stopwatch.StartNew();
+                    while (p is not null && !p.HasExited)
+                    {
+                        Thread.Sleep(500);
+                        reporter.Report(Math.Min(99, 90 + (int)(sw.Elapsed.TotalSeconds / 2)));
+                    }
+                }
+                reporter.Report(100);
+                return RuntimeInstalled();
+            });
+
+            if (!ok)
+                MessageBoxW(IntPtr.Zero,
+                    $"运行时安装未成功。\n\n请手动下载安装：\n{InstallerUrl}",
+                    "剪贴板助手", MB_OK | MB_ICONERROR);
+            return ok;
         }
         catch (Exception ex)
         {
-            MessageBoxW(IntPtr.Zero, $"下载/安装失败：{ex.Message}\n\n请手动下载安装：\n{InstallerUrl}",
+            MessageBoxW(IntPtr.Zero,
+                $"下载/安装失败：{ex.Message}\n\n请手动下载安装：\n{InstallerUrl}",
                 "剪贴板助手", MB_OK | MB_ICONERROR);
             return false;
         }
