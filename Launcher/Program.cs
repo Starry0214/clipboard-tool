@@ -72,9 +72,8 @@ internal static class Program
             if (TrySelfUpdate(appDir))
                 return 0; // 自更新已触发重启，本进程退出
 
-            // ② 解压内嵌主程序（内嵌版本比已解压版新才覆盖，保留被自动更新替换过的新版）
-            var extractedVer = ReadVersionFile(Path.Combine(appDir, VersionFile));
-            if (!File.Exists(mainExe) || extractedVer is null || extractedVer < SelfVersion)
+            // ② 解压内嵌主程序：以实际 exe 文件版本为准（曾因内嵌版本错配导致 version.txt=1.3.5 而 exe 是 1.3.4，永不重解压）
+            if (GetExeVersion(mainExe) is not { } exeVer || exeVer < SelfVersion)
             {
                 ExtractEmbedded(mainExe);
                 WriteVersionFile(Path.Combine(appDir, VersionFile), SelfVersion.ToString(3));
@@ -192,13 +191,13 @@ internal static class Program
             stream.CopyTo(fs);
     }
 
-    private static Version? ReadVersionFile(string path)
+    private static Version? GetExeVersion(string path)
     {
         try
         {
             if (!File.Exists(path))
                 return null;
-            return Version.TryParse(File.ReadAllText(path).Trim(), out var v) ? v : null;
+            return Version.TryParse(FileVersionInfo.GetVersionInfo(path).FileVersion, out var v) ? v : null;
         }
         catch (Exception)
         {
