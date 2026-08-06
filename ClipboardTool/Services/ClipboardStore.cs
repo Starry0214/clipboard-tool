@@ -223,6 +223,16 @@ public sealed class ClipboardStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>刷新条目时间戳使其移到非置顶区顶部（预览后使用，不改变置顶状态）。</summary>
+    public void TouchById(long id)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "UPDATE entries SET created_at = $created WHERE id = $id";
+        cmd.Parameters.AddWithValue("$created", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
     public void Delete(long id)
     {
         string? file = null;

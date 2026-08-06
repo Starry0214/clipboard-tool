@@ -22,6 +22,8 @@ public partial class MainWindow : Window
         {
             if (HistoryList.SelectedItem is not Entry entry)
                 return;
+            // 预览后把该条目移到列表顶部（非置顶），便于知道刚才预览的是哪一条
+            _store.TouchById(entry.Id);
             switch (entry.Type)
             {
                 case "image":
@@ -34,6 +36,7 @@ public partial class MainWindow : Window
                     OpenFile(entry.Content);
                     break;
             }
+            Refresh();
         };
         Closing += (_, e) =>
         {

@@ -302,6 +302,8 @@ public partial class OverlayWindow : Window
     {
         if (ContextEntry(sender) is not Entry entry)
             return;
+        // 预览后把该条目移到列表顶部（非置顶），便于知道刚才预览的是哪一条
+        _store.TouchById(entry.Id);
         switch (entry.Type)
         {
             case "image":
@@ -314,6 +316,7 @@ public partial class OverlayWindow : Window
                 OpenFile(entry.Content);
                 break;
         }
+        Reload();
     }
 
     private void OnPaste(object sender, RoutedEventArgs e)
