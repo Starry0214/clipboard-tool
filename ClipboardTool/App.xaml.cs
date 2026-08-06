@@ -124,8 +124,31 @@ public partial class App : Application
         poller.Start();
     }
 
+    /// <summary>防止轮询/手动检查并发：弹窗挂起时再次触发会堆叠弹窗，应用关闭时残留续体崩溃（"应用程序对象正在关闭"）。</summary>
+    private static bool _checkingUpdate;
+
     /// <summary>检查更新：自动模式静默，手动模式带反馈。有更新时引导下载并重启安装。</summary>
     private async Task CheckForUpdateAsync(bool manual)
+    {
+        if (_checkingUpdate)
+        {
+            if (manual)
+                MessageBox.Show("正在检查更新，请稍候。", "检查更新",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        _checkingUpdate = true;
+        try
+        {
+            await CheckForUpdateCoreAsync(manual);
+        }
+        finally
+        {
+            _checkingUpdate = false;
+        }
+    }
+
+    private async Task CheckForUpdateCoreAsync(bool manual)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var latest = await Updater.CheckAsync();

@@ -154,7 +154,8 @@ internal static class Program
     /// <summary>从更新服务器取文本；失败抛异常。</summary>
     private static string GetText(string path)
     {
-        using var http = CreateClient(TimeSpan.FromSeconds(10));
+        // 慢网络 TLS 握手可能超 10s，放宽到 25s（连接阶段由 CreateClient 的 10s ConnectTimeout 快速失败）
+        using var http = CreateClient(TimeSpan.FromSeconds(25));
         return http.GetStringAsync($"{UpdateBaseUrl}/{path}").GetAwaiter().GetResult();
     }
 

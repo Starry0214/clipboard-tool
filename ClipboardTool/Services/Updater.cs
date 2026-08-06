@@ -54,7 +54,11 @@ public static class Updater
     /// <summary>查询服务器上的最新版本号。网络不可达或解析失败返回 null。</summary>
     public static async Task<string?> CheckAsync()
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        // 慢网络（如政务网）TLS 握手可能超 10s，放宽总超时；连接阶段 15s 快速失败
+        using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
+        {
+            Timeout = TimeSpan.FromSeconds(25),
+        };
         try
         {
             var text = await http.GetStringAsync($"{UpdateBaseUrl}/version.txt");
@@ -75,7 +79,10 @@ public static class Updater
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
+            {
+                Timeout = TimeSpan.FromSeconds(25),
+            };
             var text = await http.GetStringAsync($"{UpdateBaseUrl}/notes.txt");
             return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
         }
@@ -91,7 +98,10 @@ public static class Updater
     /// <summary>下载最新版 exe 到数据目录 updates/ 下，返回本地路径；失败返回 null。</summary>
     public static async Task<string?> DownloadAsync(string dataDir, IProgress<DownloadProgress>? progress = null)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
+        {
+            Timeout = TimeSpan.FromMinutes(10),
+        };
         try
         {
             var dir = Path.Combine(dataDir, "updates");
