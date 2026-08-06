@@ -340,23 +340,33 @@ public partial class OverlayWindow : Window
     }
 }
 
-/// <summary>byte[] PNG → BitmapSource，带简单缓存。</summary>
+/// <summary>byte[] PNG → BitmapSource，有界缓存（LRU，上限 60，冻结对象可完整回收）。</summary>
 public sealed class ThumbnailConverter : System.Windows.Data.IValueConverter
 {
+    // 列表可见条目约 15-20 条，60 上限足够滚动余量；超出按插入顺序淘汰最旧，
+    // 避免缓存随截图总数无限增长（截图多时内存不会持续扩大）
+    private const int MaxCache = 60;
     private static readonly Dictionary<string, BitmapSource> Cache = new();
 
     public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
         if (value is not byte[] png)
             return DependencyProperty.UnsetValue;
-        var key = System.Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png))[..16];
+        // 缩略图 BLOB 相同则内容哈希相同（PNG 头/IHDR 前缀对同尺寸图相同，不能用前缀做 key）
+        var key = System.Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png));
         if (Cache.TryGetValue(key, out var cached))
             return cached;
         using var ms = new MemoryStream(png);
         var decoder = new PngBitmapDecoder(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         var bmp = decoder.Frames[0];
-        if (Cache.Count > 200)
-            Cache.Clear();
+        if (bmp.CanFreeze)
+            bmp.Freeze(); // 冻结后 WPF 可释放中间像素，缓存对象可被 GC 完整回收
+        if (Cache.Count >= MaxCache)
+        {
+            // Dictionary 保持插入顺序，淘汰最先插入的条目
+            var oldest = Cache.Keys.First();
+            Cache.Remove(oldest);
+        }
         Cache[key] = bmp;
         return bmp;
     }
