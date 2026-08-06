@@ -44,6 +44,8 @@ public partial class MainWindow : Window
             e.Cancel = true;
             Hide();
         };
+        // 从任务栏/托盘重新打开时自动刷新列表（最小化恢复、遮挡后激活都覆盖）
+        Activated += (_, _) => Refresh();
         Refresh();
     }
 
