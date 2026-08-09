@@ -74,15 +74,36 @@
                         </Grid>
                     </RadioButton>
                     <Rectangle Width="1" Height="16" Fill="#DDDDDD" Margin="8,0"/>
-                    <RadioButton x:Name="SourceAll" GroupName="SourceFilter"
-                                 Content="全部" FontSize="11" Foreground="#666666"
-                                 IsChecked="True" Checked="OnSourceFilterChanged" Margin="0,0,6,0"/>
-                    <RadioButton x:Name="SourceLocal" GroupName="SourceFilter"
-                                 Content="本机" FontSize="11" Foreground="#666666"
-                                 Checked="OnSourceFilterChanged" Margin="0,0,6,0"/>
-                    <RadioButton x:Name="SourcePhone" GroupName="SourceFilter"
-                                 Content="手机" FontSize="11" Foreground="#666666"
-                                 Checked="OnSourceFilterChanged"/>
+                    <Border x:Name="SourceFilterPanel" Background="#F0F1F3" CornerRadius="7" Padding="2">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="SourceAll" GroupName="SourceFilter"
+                                         Style="{StaticResource FilterIconButton}"
+                                         ToolTip="显示全部来源" IsChecked="True" Checked="OnSourceFilterChanged">
+                                <Grid Width="18" Height="18">
+                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.6" RadiusX="1.5" RadiusY="1.5" Fill="Transparent"/>
+                                    <Line X1="9" Y1="2" X2="9" Y2="16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4"/>
+                                    <Line X1="2" Y1="9" X2="16" Y2="9" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4"/>
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="SourceLocal" GroupName="SourceFilter"
+                                         Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                         ToolTip="只看本机复制" Checked="OnSourceFilterChanged">
+                                <Grid Width="20" Height="18">
+                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" RadiusX="1.5" RadiusY="1.5" Width="16" Height="11" Fill="Transparent" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                    <Line X1="5" Y1="13" X2="15" Y2="13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                    <Line X1="9" Y1="16" X2="11" Y2="16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="SourcePhone" GroupName="SourceFilter"
+                                         Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
+                                         ToolTip="只看手机同步" Checked="OnSourceFilterChanged">
+                                <Grid Width="12" Height="20">
+                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" RadiusX="2" RadiusY="2" Width="9" Height="17" Fill="Transparent" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                    <Line X1="6" Y1="15" X2="6" Y2="17" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                </Grid>
+                            </RadioButton>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Grid>
         </Border>

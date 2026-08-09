@@ -224,6 +224,9 @@ public sealed class SyncService : IDisposable
     {
         switch (m.Type)
         {
+            case "delete" when !string.IsNullOrEmpty(m.Hash):
+                _store.DeleteByHash(m.Hash!);
+                break;
             case "clip_text" when !string.IsNullOrEmpty(m.Text):
             {
                 var entry = new Entry

@@ -8,7 +8,7 @@ namespace ClipboardTool;
 /// <summary>同步服务器消息（WS 下行信封 / history 条目）。</summary>
 public sealed record SyncMessage(
     string Type, long OriginDeviceId, long Seq, long Ts,
-    string? Text, string? MediaId, string? Name, long Size);
+    string? Text, string? MediaId, string? Name, long Size, string? Hash = null);
 
 /// <summary>
 /// 同步服务器客户端：注册/登录、媒体上传下载、历史拉取、WS 长连接（自动重连）。
@@ -142,7 +142,7 @@ public sealed class SyncClient : IDisposable
 
     private static SyncMessage ParseMessage(JsonElement m)
     {
-        string? mediaId = null, name = null, text = null;
+        string? mediaId = null, name = null, text = null, hash = null;
         long size = 0;
         if (m.TryGetProperty("payload", out var payload))
         {
@@ -152,6 +152,7 @@ public sealed class SyncClient : IDisposable
                 if (payload.TryGetProperty("mediaId", out var id)) mediaId = id.GetRawText().Trim('"');
                 if (payload.TryGetProperty("name", out var n)) name = n.GetString();
                 if (payload.TryGetProperty("size", out var sz)) size = sz.GetInt64();
+                if (payload.TryGetProperty("hash", out var h)) hash = h.GetString();
             }
             else if (payload.ValueKind == JsonValueKind.String)
             {
@@ -163,7 +164,7 @@ public sealed class SyncClient : IDisposable
             m.TryGetProperty("originDeviceId", out var od) ? od.GetInt64() : 0,
             m.TryGetProperty("seq", out var sq) ? sq.GetInt64() : 0,
             m.TryGetProperty("ts", out var ts) ? ts.GetInt64() : 0,
-            text, mediaId, name, size);
+            text, mediaId, name, size, hash);
     }
 
     /// <summary>建立 WS 长连接并进入读循环；断线自动退避重连直到取消。</summary>

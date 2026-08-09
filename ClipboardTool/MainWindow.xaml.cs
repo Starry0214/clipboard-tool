@@ -16,6 +16,8 @@ public partial class MainWindow : Window
         _store = store;
         _settings = settings;
         VersionText.Text = $"v{Updater.CurrentVersion}";
+        // 未开启多端同步时来源筛选无意义，隐藏
+        SourceFilterPanel.Visibility = _settings.SyncEnabled ? Visibility.Visible : Visibility.Collapsed;
         SearchBox.TextChanged += (_, _) => Refresh();
         FilterAll.IsChecked = true;
         // 双击：图片→大图预览；文本→全文预览；文件→用默认程序打开
@@ -46,7 +48,12 @@ public partial class MainWindow : Window
             Hide();
         };
         // 从任务栏/托盘重新打开时自动刷新列表（最小化恢复、遮挡后激活都覆盖）
-        Activated += (_, _) => Refresh();
+        Activated += (_, _) =>
+        {
+            // 同步开关变化后重新打开主窗口时同步来源筛选显隐
+            SourceFilterPanel.Visibility = _settings.SyncEnabled ? Visibility.Visible : Visibility.Collapsed;
+            Refresh();
+        };
         Refresh();
     }
 
