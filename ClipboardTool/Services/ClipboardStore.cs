@@ -277,20 +277,21 @@ public sealed class ClipboardStore : IDisposable
         TryDeleteFile(file);
     }
 
-    /// <summary>按内容哈希删除条目（跨端同步删除用），并清理图片文件。</summary>
+    /// <summary>按内容哈希删除条目（跨端同步删除用），并清理图片文件。
+    /// 用 NOCASE 匹配：本库 hash 为大写 hex（Convert.ToHexString），服务器/手机端为小写。</summary>
     public void DeleteByHash(string hash)
     {
         var files = new List<string>();
         using (var sel = _conn.CreateCommand())
         {
-            sel.CommandText = "SELECT content FROM entries WHERE hash = $hash AND type = 'image'";
+            sel.CommandText = "SELECT content FROM entries WHERE hash = $hash COLLATE NOCASE AND type = 'image'";
             sel.Parameters.AddWithValue("$hash", hash);
             using var reader = sel.ExecuteReader();
             while (reader.Read())
                 files.Add(reader.GetString(0));
         }
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM entries WHERE hash = $hash";
+        cmd.CommandText = "DELETE FROM entries WHERE hash = $hash COLLATE NOCASE";
         cmd.Parameters.AddWithValue("$hash", hash);
         cmd.ExecuteNonQuery();
         foreach (var f in files)

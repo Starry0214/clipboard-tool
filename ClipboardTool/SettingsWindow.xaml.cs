@@ -51,6 +51,7 @@ public partial class SettingsWindow : Window
         SyncLoginBtn.Visibility = loggedIn ? Visibility.Collapsed : Visibility.Visible;
         SyncRegisterBtn.Visibility = loggedIn ? Visibility.Collapsed : Visibility.Visible;
         SyncLogoutBtn.Visibility = loggedIn ? Visibility.Visible : Visibility.Collapsed;
+        SyncNowBtn.Visibility = loggedIn ? Visibility.Visible : Visibility.Collapsed;
         if (loggedIn)
         {
             var s = Sync!;
@@ -95,6 +96,21 @@ public partial class SettingsWindow : Window
         Sync?.Logout();
         SyncStatusText.Text = "未登录";
         UpdateSyncUi();
+    }
+
+    private async void OnSyncNow(object sender, RoutedEventArgs e)
+    {
+        var sync = Sync;
+        if (sync is null)
+            return;
+        SyncNowBtn.IsEnabled = false;
+        SyncStatusText.Text = "同步中…";
+        var result = await sync.SyncNowAsync();
+        SyncNowBtn.IsEnabled = true;
+        if (result is null)
+            UpdateSyncUi();
+        else
+            SyncStatusText.Text = result;
     }
 
     /// <summary>展示数据目录路径与占用大小。</summary>

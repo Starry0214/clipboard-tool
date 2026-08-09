@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ClipboardTool;
 
@@ -117,7 +119,8 @@ public sealed class SyncService : IDisposable
                 {
                     if (m.Seq <= _settings.SyncLastSeq)
                         continue; // 已处理过（跨重启去重）
-                    await ApplyRemote(m, isReplay: true);
+                    if (m.Type != "delete")
+                        await ApplyRemote(m, isReplay: true); // 自动路径不应用删除（删除仅手动同步传播）
                     if (m.Seq > _settings.SyncLastSeq)
                     {
                         _settings.SyncLastSeq = m.Seq;
@@ -207,7 +210,8 @@ public sealed class SyncService : IDisposable
             if (m.Seq > 0 && m.Seq <= _settings.SyncLastSeq)
                 return; // 已处理过
             Log.Info($"同步收到消息: {m.Type} origin={m.OriginDeviceId} seq={m.Seq}");
-            await ApplyRemote(m, isReplay: false);
+            if (m.Type != "delete")
+                await ApplyRemote(m, isReplay: false); // 自动路径不应用删除（删除仅手动同步传播）
             if (m.Seq > _settings.SyncLastSeq)
             {
                 _settings.SyncLastSeq = m.Seq;
@@ -218,6 +222,62 @@ public sealed class SyncService : IDisposable
         {
             Log.Error("同步消息入库失败", ex);
         }
+    }
+
+    /// <summary>手动同步服务器到本地：全量拉取（含 delete 记录）并应用——删除仅在此路径传播；本地已删条目可从服务器找回。</summary>
+    public async Task<string?> SyncNowAsync()
+    {
+        if (_client is null || !_running)
+            return "未连接，无法同步";
+        var history = await _client.FetchHistoryAsync(0);
+        if (history is null)
+            return "同步失败：无法连接服务器";
+        var n = 0;
+        long maxSeq = _settings.SyncLastSeq;
+        foreach (var m in history)
+        {
+            await ApplyRemote(m, isReplay: true);
+            if (m.Seq > maxSeq)
+                maxSeq = m.Seq;
+            n++;
+        }
+        _settings.SyncLastSeq = maxSeq;
+        _settings.Save();
+        return $"同步完成（处理 {n} 条）";
+    }
+
+    /// <summary>删除条目：本地删除 + 跨端同步删除（文本/图片按内容哈希，与服务器算法一致；文件不支持跨端）。</summary>
+    public void DeleteEntry(Entry entry)
+    {
+        _store.Delete(entry.Id);
+        if (!_running || _client is null)
+            return;
+        var hash = ComputeSyncHash(entry);
+        if (hash is null)
+            return;
+        _ = Task.Run(async () =>
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                if (await _client.SendDeleteAsync(hash))
+                    return;
+                await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
+            }
+        });
+    }
+
+    private string? ComputeSyncHash(Entry entry)
+    {
+        if (entry.Type == "text")
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("text\0" + entry.Content))).ToLowerInvariant();
+        if (entry.Type == "image")
+        {
+            var full = _store.GetById(entry.Id); // 列表条目不含原图，需取完整条目
+            if (full?.Image is null)
+                return null;
+            return Convert.ToHexString(SHA256.HashData(full.Image)).ToLowerInvariant();
+        }
+        return null; // file：本地路径哈希无法跨端匹配
     }
 
     private async Task ApplyRemote(SyncMessage m, bool isReplay)

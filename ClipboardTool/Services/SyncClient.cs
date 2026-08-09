@@ -251,11 +251,17 @@ public sealed class SyncClient : IDisposable
         await SendAsync(JsonSerializer.Serialize(new { type, payload = new { mediaId, name, size } }));
     }
 
-    private async Task SendAsync(string json)
+    /// <summary>发送跨端删除（hash 为内容哈希，服务器据此删消息并落 delete 记录）。失败可重试。</summary>
+    public async Task<bool> SendDeleteAsync(string hash)
+    {
+        return await SendAsync(JsonSerializer.Serialize(new { type = "delete", payload = new { hash } }));
+    }
+
+    private async Task<bool> SendAsync(string json)
     {
         var ws = _ws;
         if (ws is null || !_connected)
-            return;
+            return false;
         try
         {
             var bytes = Encoding.UTF8.GetBytes(json);
@@ -263,9 +269,11 @@ public sealed class SyncClient : IDisposable
             {
                 ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None).GetAwaiter().GetResult();
             }
+            return true;
         }
         catch (Exception)
         {
+            return false;
         }
     }
 

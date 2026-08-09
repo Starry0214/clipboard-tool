@@ -128,9 +128,21 @@ func (c *conn) readLoop(a *app) {
 				log.Printf("delete messages: %v", err)
 				continue
 			}
+			// delete 记录落库（带 seq）：客户端手动同步时可拉到并应用；自动推送不应用删除
+			if _, err := a.store.InsertMessage(c.userID, c.deviceID, "delete", in.Payload); err != nil {
+				log.Printf("insert delete message: %v", err)
+				continue
+			}
+			msgs, err := a.store.MessagesSince(c.userID, 0)
+			if err != nil || len(msgs) == 0 {
+				continue
+			}
+			last := msgs[len(msgs)-1]
 			out, _ := json.Marshal(map[string]any{
 				"type":           "delete",
 				"originDeviceId": c.deviceID,
+				"seq":            last.Seq,
+				"ts":             last.Ts,
 				"payload":        json.RawMessage(in.Payload),
 			})
 			a.hub.broadcast(c.userID, c.deviceID, out)

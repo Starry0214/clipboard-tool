@@ -150,23 +150,22 @@ func (s *Store) TouchDevice(deviceID int64) error {
 	return err
 }
 
+// InsertMessage 插入消息，seq 取行 id（AUTOINCREMENT 永不复用）：
+// 删除消息后 MAX(seq)+1 会回落重用，破坏客户端 seq 去重，故不能用。
 func (s *Store) InsertMessage(userID, originDeviceID int64, msgType string, payload []byte) (int64, error) {
-	seq, err := s.nextSeq(userID)
-	if err != nil {
-		return 0, err
-	}
 	res, err := s.db.Exec(`INSERT INTO messages(user_id, origin_device_id, type, seq, ts, payload) VALUES(?, ?, ?, ?, ?, ?)`,
-		userID, originDeviceID, msgType, seq, time.Now().UnixMilli(), payload)
+		userID, originDeviceID, msgType, 0, time.Now().UnixMilli(), payload)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
-}
-
-func (s *Store) nextSeq(userID int64) (int64, error) {
-	var seq int64
-	err := s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE user_id = ?`, userID).Scan(&seq)
-	return seq, err
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if _, err := s.db.Exec(`UPDATE messages SET seq = ? WHERE id = ?`, id, id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (s *Store) MessagesSince(userID int64, since int64) ([]Message, error) {

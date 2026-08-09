@@ -101,7 +101,8 @@ public partial class MainWindow : Window
     {
         if (HistoryList.SelectedItem is not Entry entry)
             return;
-        _store.Delete(entry.Id);
+        // 本地删除 + 跨端同步删除（同步未启用时仅本地删）
+        (Application.Current as App)?.SyncService?.DeleteEntry(entry);
         Refresh();
     }
 
