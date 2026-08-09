@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -197,6 +199,101 @@ func (s *Store) GetMedia(userID, mediaID int64) ([]byte, error) {
 	var data []byte
 	err := s.db.QueryRow(`SELECT data FROM media WHERE id = ? AND user_id = ?`, mediaID, userID).Scan(&data)
 	return data, err
+}
+
+// DeleteMessagesByHash 删除该账号下内容哈希匹配的消息（文本按 "text\0内容" 哈希、图片按字节哈希），
+// 并清理不再被任何消息引用的媒体；返回删除的消息数。
+func (s *Store) DeleteMessagesByHash(userID int64, hash string) (int64, error) {
+	rows, err := s.db.Query(`SELECT id, type, payload FROM messages WHERE user_id = ?`, userID)
+	if err != nil {
+		return 0, err
+	}
+	type match struct {
+		id      int64
+		mediaID int64
+	}
+	var matches []match
+	for rows.Next() {
+		var id int64
+		var msgType string
+		var payload []byte
+		if err := rows.Scan(&id, &msgType, &payload); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		var p struct {
+			Text    string `json:"text"`
+			MediaID int64  `json:"mediaId"`
+		}
+		json.Unmarshal(payload, &p)
+		var h string
+		switch msgType {
+		case "clip_text":
+			if p.Text == "" {
+				continue
+			}
+			h = hashText(p.Text)
+		case "clip_image":
+			if p.MediaID == 0 {
+				continue
+			}
+			data, err := s.GetMedia(userID, p.MediaID)
+			if err != nil {
+				continue
+			}
+			h = hashBytes(data)
+		default:
+			continue // clip_file 本地哈希为路径，无法跨端匹配，不支持彻底删除
+		}
+		if h != hash {
+			continue
+		}
+		matches = append(matches, match{id, p.MediaID})
+	}
+	rows.Close()
+
+	for _, m := range matches {
+		if _, err := s.db.Exec(`DELETE FROM messages WHERE id = ? AND user_id = ?`, m.id, userID); err != nil {
+			return 0, err
+		}
+		if m.mediaID != 0 {
+			refs, err := s.countMediaRefs(userID, m.mediaID)
+			if err == nil && refs == 0 {
+				s.db.Exec(`DELETE FROM media WHERE id = ? AND user_id = ?`, m.mediaID, userID)
+			}
+		}
+	}
+	return int64(len(matches)), nil
+}
+
+// countMediaRefs 统计该账号下仍引用指定媒体的消息数（精确解析 payload）。
+func (s *Store) countMediaRefs(userID, mediaID int64) (int64, error) {
+	rows, err := s.db.Query(`SELECT payload FROM messages WHERE user_id = ? AND type IN ('clip_image','clip_file')`, userID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	var n int64
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return 0, err
+		}
+		var p struct {
+			MediaID int64 `json:"mediaId"`
+		}
+		if json.Unmarshal(payload, &p) == nil && p.MediaID == mediaID {
+			n++
+		}
+	}
+	return n, rows.Err()
+}
+
+func hashText(text string) string { return hashBytes([]byte("text\x00" + text)) }
+
+func hashBytes(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Store) Cleanup(olderThan int64) (int, error) {

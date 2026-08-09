@@ -117,6 +117,25 @@ func (c *conn) readLoop(a *app) {
 		if err := json.Unmarshal(data, &in); err != nil || in.Type == "" {
 			continue
 		}
+		if in.Type == "delete" {
+			var d struct {
+				Hash string `json:"hash"`
+			}
+			if err := json.Unmarshal(in.Payload, &d); err != nil || d.Hash == "" {
+				continue
+			}
+			if _, err := a.store.DeleteMessagesByHash(c.userID, d.Hash); err != nil {
+				log.Printf("delete messages: %v", err)
+				continue
+			}
+			out, _ := json.Marshal(map[string]any{
+				"type":           "delete",
+				"originDeviceId": c.deviceID,
+				"payload":        json.RawMessage(in.Payload),
+			})
+			a.hub.broadcast(c.userID, c.deviceID, out)
+			continue
+		}
 		if _, err := a.store.InsertMessage(c.userID, c.deviceID, in.Type, in.Payload); err != nil {
 			log.Printf("insert message: %v", err)
 			continue
