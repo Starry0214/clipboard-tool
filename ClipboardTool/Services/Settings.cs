@@ -16,6 +16,18 @@ public sealed class Settings
     /// <summary>悬浮列表最大高度（逻辑像素，0=按屏幕工作区高度自动适配 70%）。</summary>
     public int OverlayMaxHeight { get; set; }
 
+    /// <summary>实验性功能：多端同步（默认关闭，设置页末尾开关启用）。</summary>
+    public bool SyncEnabled { get; set; }
+
+    /// <summary>同步账号信息（登录成功后持久化，退出登录时清空 token）。</summary>
+    public string SyncUsername { get; set; } = "";
+    public string SyncToken { get; set; } = "";
+    public long SyncDeviceId { get; set; }
+    public string SyncDeviceName { get; set; } = "";
+
+    /// <summary>同步服务器地址覆盖（空=内置双镜像；联调时可填 http://127.0.0.1:8082，UI 不暴露）。</summary>
+    public string SyncServerOverride { get; set; } = "";
+
     private string _path = "";
 
     public static Settings Load(string dataDir)
