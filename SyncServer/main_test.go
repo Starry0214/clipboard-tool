@@ -8,9 +8,10 @@ import (
 )
 
 func TestHealth(t *testing.T) {
+	s := openTestStore(t)
 	req := httptest.NewRequest("GET", "/api/health", nil)
 	rec := httptest.NewRecorder()
-	newApp().mux.ServeHTTP(rec, req)
+	NewApp(s).mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}

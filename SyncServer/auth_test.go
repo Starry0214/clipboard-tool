@@ -15,9 +15,7 @@ func newTestApp(t *testing.T) (*app, *Store) {
 		t.Fatalf("OpenStore: %v", err)
 	}
 	t.Cleanup(func() { s.Close() })
-	a := newApp()
-	a.store = s
-	return a, s
+	return NewApp(s), s
 }
 
 func doJSON(t *testing.T, a *app, method, path, body, token string) *httptest.ResponseRecorder {

@@ -13,8 +13,8 @@ type app struct {
 	hub   *Hub
 }
 
-func newApp() *app {
-	a := &app{mux: http.NewServeMux(), hub: newHub()}
+func NewApp(s *Store) *app {
+	a := &app{mux: http.NewServeMux(), store: s, hub: newHub()}
 	a.mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
@@ -41,10 +41,8 @@ func main() {
 	stop := make(chan struct{})
 	defer close(stop)
 	startCleanup(store, stop)
-	a := newApp()
-	a.store = store
 	log.Printf("sync server listening on %s (db=%s)", *addr, *dbPath)
-	if err := http.ListenAndServe(*addr, a.mux); err != nil {
+	if err := http.ListenAndServe(*addr, NewApp(store).mux); err != nil {
 		log.Fatal(err)
 	}
 }
