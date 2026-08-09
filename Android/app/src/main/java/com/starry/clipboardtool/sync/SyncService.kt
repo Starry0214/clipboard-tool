@@ -72,11 +72,11 @@ class SyncService(private val context: Context) {
         val c = SyncClient(baseUrl(), AppState.token)
         client = c
         scope.launch {
-            // 回放：只入库不写剪贴板（seq 去重）；自动路径不应用 delete（删除仅手动同步传播）
+            // 回放：只入库不写剪贴板（seq 去重）；delete 为彻底删除，任何同步都应用
             val history = c.fetchHistory(0)
             history?.forEach { m ->
                 if (m.seq <= AppState.lastSeq) return@forEach
-                if (m.type != "delete") applyRemote(m, writeClipboard = false)
+                applyRemote(m, writeClipboard = false)
                 if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
             }
             main.post { onHistoryChanged() }
@@ -85,7 +85,7 @@ class SyncService(private val context: Context) {
                     if (!running) return@connect
                     if (m.seq > 0 && m.seq <= AppState.lastSeq) return@connect
                     scope.launch {
-                        if (m.type != "delete") applyRemote(m, writeClipboard = true)
+                        applyRemote(m, writeClipboard = true)
                         if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
                         main.post { onHistoryChanged() }
                     }
@@ -164,7 +164,7 @@ class SyncService(private val context: Context) {
     }
 
     /** App 获焦（打开/回前台）：上传手机当前剪贴板 + 增量拉取服务器新消息（补 WS 离线期间错过的电脑端内容）。
-     * 自动路径不应用 delete——删除仅手动"同步服务器到本地"传播。 */
+     * delete 只来自彻底删除，任何同步（自动/手动）都应用。 */
     fun onAppForeground() {
         onLocalClip()
         val c = client ?: return
@@ -172,7 +172,7 @@ class SyncService(private val context: Context) {
             val history = c.fetchHistory(AppState.lastSeq) ?: return@launch
             history.forEach { m ->
                 if (m.seq > 0 && m.seq <= AppState.lastSeq) return@forEach
-                if (m.type != "delete") applyRemote(m, writeClipboard = true)
+                applyRemote(m, writeClipboard = true)
                 if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
             }
             main.post { onHistoryChanged() }
