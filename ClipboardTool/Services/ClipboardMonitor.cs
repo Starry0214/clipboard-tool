@@ -18,6 +18,9 @@ public sealed class ClipboardMonitor
     /// <summary>粘贴器写入剪贴板时置位，抑制随后的监听通知，避免自记自写。</summary>
     public bool SuppressNext { get; set; }
 
+    /// <summary>本地捕获入库成功后触发（同步模块据此上传）。</summary>
+    public event Action<Entry>? EntryCaptured;
+
     public ClipboardMonitor(ClipboardStore store) => _store = store;
 
     public bool Paused
@@ -83,7 +86,9 @@ public sealed class ClipboardMonitor
             var text = data.GetData(DataFormats.UnicodeText) as string;
             if (!string.IsNullOrEmpty(text))
             {
-                _store.Add(new Entry { Type = "text", Content = text, CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+                var entry = new Entry { Type = "text", Content = text, CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+                if (_store.Add(entry))
+                    EntryCaptured?.Invoke(entry);
                 Log.Info($"捕获文本 {text.Length} 字符");
             }
             return;
@@ -98,15 +103,18 @@ public sealed class ClipboardMonitor
                 var thumb = EncodePng(MakeThumb(bmp, 200));
                 Log.Info($"捕获图片 {bmp.PixelWidth}x{bmp.PixelHeight}，PNG {png.Length / 1024}KB");
                 var path = _store.SaveImageFile(png);
-                var added = _store.Add(new Entry
+                var entry = new Entry
                 {
                     Type = "image",
                     Content = path,
                     Image = png, // 仅用于内容哈希去重，不入库
                     Thumb = thumb,
                     CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                });
-                if (!added)
+                };
+                var added = _store.Add(entry);
+                if (added)
+                    EntryCaptured?.Invoke(entry);
+                else
                 {
                     try { File.Delete(path); } catch (IOException) { }
                 }
@@ -118,7 +126,9 @@ public sealed class ClipboardMonitor
         {
             if (data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
-                _store.Add(new Entry { Type = "file", Content = files[0], CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+                var entry = new Entry { Type = "file", Content = files[0], CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+                if (_store.Add(entry))
+                    EntryCaptured?.Invoke(entry);
                 Log.Info($"捕获文件 {files[0]}");
             }
         }
