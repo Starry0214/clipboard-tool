@@ -13,6 +13,7 @@ data class SyncMessage(
     val mediaId: String?,
     val name: String?,
     val size: Long,
+    val hash: String? = null,
 )
 
 fun parseSyncMessage(json: String): SyncMessage {
@@ -20,6 +21,7 @@ fun parseSyncMessage(json: String): SyncMessage {
     var text: String? = null
     var mediaId: String? = null
     var name: String? = null
+    var hash: String? = null
     var size = 0L
     if (o.has("payload")) {
         val p = o.optJSONObject("payload")
@@ -28,6 +30,7 @@ fun parseSyncMessage(json: String): SyncMessage {
             if (p.has("mediaId")) mediaId = p.getString("mediaId")
             if (p.has("name")) name = p.getString("name")
             if (p.has("size")) size = p.getLong("size")
+            if (p.has("hash")) hash = p.getString("hash")
         }
     }
     return SyncMessage(
@@ -35,5 +38,5 @@ fun parseSyncMessage(json: String): SyncMessage {
         originDeviceId = o.optLong("originDeviceId", 0),
         seq = o.optLong("seq", 0),
         ts = o.optLong("ts", 0),
-        text = text, mediaId = mediaId, name = name, size = size)
+        text = text, mediaId = mediaId, name = name, size = size, hash = hash)
 }

@@ -148,6 +148,11 @@ class SyncClient(private val baseUrl: String, private val token: String) {
         return send("""{"type":"$type","payload":$payload}""")
     }
 
+    fun sendDelete(hash: String): Boolean {
+        val payload = JSONObject().put("hash", hash)
+        return send("""{"type":"delete","payload":$payload}""")
+    }
+
     private fun send(json: String): Boolean {
         val ws = synchronized(this) { ws }
         if (ws == null) return false

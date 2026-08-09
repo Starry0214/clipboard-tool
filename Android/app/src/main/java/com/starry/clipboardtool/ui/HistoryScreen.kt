@@ -17,11 +17,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +50,7 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     var typeFilter by remember { mutableStateOf("") } // "" | text | image | file
+    var deleteTarget by remember { mutableStateOf<Entry?>(null) }
 
     DisposableEffect(Unit) {
         AppState.syncService?.onHistoryChanged = { refresh++ }
@@ -89,9 +92,7 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                         ClipboardEvents.writeClip(context, entry, AppState.store)
                         Toast.makeText(context, "已写入剪贴板", Toast.LENGTH_SHORT).show()
                     }, onLongClick = {
-                        AppState.store.delete(entry.id)
-                        refresh++
-                        Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                        deleteTarget = entry
                     })
                 }
             }
@@ -102,6 +103,34 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                 }
             }
         }
+    }
+
+    // 长按删除对话框：本地删除 / 彻底删除（同步删除服务器与其他设备）
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除条目") },
+            text = {
+                Text(if (target.type == "file")
+                    "文件条目仅支持本地删除（文件无法跨端彻底删除）。"
+                else
+                    "本地删除：仅移除本机记录。\n彻底删除：同步移除服务器与其他设备上的相同内容。")
+            },
+            confirmButton = {
+                Row {
+                    if (target.type != "file") {
+                        TextButton(onClick = {
+                            AppState.syncService?.deleteEntry(target, fully = true)
+                            deleteTarget = null
+                        }) { Text("彻底删除") }
+                    }
+                    TextButton(onClick = {
+                        AppState.syncService?.deleteEntry(target, fully = false)
+                        deleteTarget = null
+                    }) { Text("本地删除") }
+                    TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+                }
+            })
     }
 }
 
