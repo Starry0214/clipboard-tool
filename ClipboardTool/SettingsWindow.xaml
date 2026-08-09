@@ -71,7 +71,7 @@
                             <TextBlock Text="账号" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
                             <TextBox x:Name="SyncUserBox" Style="{StaticResource FluentTextBox}" Margin="0,0,0,8"/>
                             <TextBlock Text="密码" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
-                            <PasswordBox x:Name="SyncPassBox" Margin="0,0,0,8"/>
+                            <PasswordBox x:Name="SyncPassBox" Style="{StaticResource FluentPasswordBox}" Margin="0,0,0,8"/>
                             <TextBlock Text="设备名称（如：工作电脑）" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
                             <TextBox x:Name="SyncDeviceBox" Style="{StaticResource FluentTextBox}" Margin="0,0,0,10"/>
                             <StackPanel Orientation="Horizontal">
