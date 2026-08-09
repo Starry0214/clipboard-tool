@@ -72,11 +72,11 @@ class SyncService(private val context: Context) {
         val c = SyncClient(baseUrl(), AppState.token)
         client = c
         scope.launch {
-            // 回放：只入库不写剪贴板（seq 去重）
+            // 回放：只入库不写剪贴板（seq 去重）；自动路径不应用 delete（删除仅手动同步传播）
             val history = c.fetchHistory(0)
             history?.forEach { m ->
                 if (m.seq <= AppState.lastSeq) return@forEach
-                applyRemote(m, writeClipboard = false)
+                if (m.type != "delete") applyRemote(m, writeClipboard = false)
                 if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
             }
             main.post { onHistoryChanged() }
@@ -85,7 +85,7 @@ class SyncService(private val context: Context) {
                     if (!running) return@connect
                     if (m.seq > 0 && m.seq <= AppState.lastSeq) return@connect
                     scope.launch {
-                        applyRemote(m, writeClipboard = true)
+                        if (m.type != "delete") applyRemote(m, writeClipboard = true)
                         if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
                         main.post { onHistoryChanged() }
                     }
@@ -161,6 +161,22 @@ class SyncService(private val context: Context) {
             upload(entry)
         }
         main.post { onHistoryChanged() }
+    }
+
+    /** App 获焦（打开/回前台）：上传手机当前剪贴板 + 增量拉取服务器新消息（补 WS 离线期间错过的电脑端内容）。
+     * 自动路径不应用 delete——删除仅手动"同步服务器到本地"传播。 */
+    fun onAppForeground() {
+        onLocalClip()
+        val c = client ?: return
+        scope.launch {
+            val history = c.fetchHistory(AppState.lastSeq) ?: return@launch
+            history.forEach { m ->
+                if (m.seq > 0 && m.seq <= AppState.lastSeq) return@forEach
+                if (m.type != "delete") applyRemote(m, writeClipboard = true)
+                if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
+            }
+            main.post { onHistoryChanged() }
+        }
     }
 
     /** 最近一次同步的内容哈希（持久化，删除后防获焦补同步加回）。 */
