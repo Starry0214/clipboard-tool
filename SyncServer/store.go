@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -28,11 +29,11 @@ type Device struct {
 }
 
 type Message struct {
-	Type           string
-	OriginDeviceID int64
-	Seq            int64
-	Ts             int64
-	Payload        []byte
+	Type           string          `json:"type"`
+	OriginDeviceID int64           `json:"originDeviceId"`
+	Seq            int64           `json:"seq"`
+	Ts             int64           `json:"ts"`
+	Payload        json.RawMessage `json:"payload"`
 }
 
 func OpenStore(path string) (*Store, error) {

@@ -23,6 +23,7 @@ func newApp() *app {
 	a.mux.HandleFunc("DELETE /api/devices/{id}", a.requireAuth(a.handleDeleteDevice))
 	a.mux.HandleFunc("POST /api/media", a.requireAuth(a.handleMediaUpload))
 	a.mux.HandleFunc("GET /api/media/{id}", a.requireAuth(a.handleMediaDownload))
+	a.mux.HandleFunc("GET /api/history", a.requireAuth(a.handleHistory))
 	return a
 }
 
