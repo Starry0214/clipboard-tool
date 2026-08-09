@@ -73,6 +73,16 @@
                                   StrokeThickness="1.5"/>
                         </Grid>
                     </RadioButton>
+                    <Rectangle Width="1" Height="16" Fill="#DDDDDD" Margin="8,0"/>
+                    <RadioButton x:Name="SourceAll" GroupName="SourceFilter"
+                                 Content="全部" FontSize="11" Foreground="#666666"
+                                 IsChecked="True" Checked="OnSourceFilterChanged" Margin="0,0,6,0"/>
+                    <RadioButton x:Name="SourceLocal" GroupName="SourceFilter"
+                                 Content="本机" FontSize="11" Foreground="#666666"
+                                 Checked="OnSourceFilterChanged" Margin="0,0,6,0"/>
+                    <RadioButton x:Name="SourcePhone" GroupName="SourceFilter"
+                                 Content="手机" FontSize="11" Foreground="#666666"
+                                 Checked="OnSourceFilterChanged"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -118,11 +128,18 @@
                                        MaxHeight="38"
                                        TextTrimming="CharacterEllipsis"
                                        FontSize="13" VerticalAlignment="Center" Foreground="#1A1A1A"/>
-                            <Border x:Name="PinBadge" Visibility="Collapsed"
-                                    Background="#E8F0FE" CornerRadius="4" Padding="4,2"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,4,0">
-                                <TextBlock Text="置顶" FontSize="10" Foreground="#0078D4" FontWeight="SemiBold"/>
-                            </Border>
+                            <!-- 来源标签 + 置顶角标 -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,4,0">
+                                <Border x:Name="SourceBadge" Visibility="Collapsed"
+                                        Background="#FFF4E5" CornerRadius="4" Padding="4,2"
+                                        Margin="0,0,4,0">
+                                    <TextBlock Text="手机" FontSize="10" Foreground="#C55A11" FontWeight="SemiBold"/>
+                                </Border>
+                                <Border x:Name="PinBadge" Visibility="Collapsed"
+                                        Background="#E8F0FE" CornerRadius="4" Padding="4,2">
+                                    <TextBlock Text="置顶" FontSize="10" Foreground="#0078D4" FontWeight="SemiBold"/>
+                                </Border>
+                            </StackPanel>
                         </Grid>
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding Type}" Value="image">
@@ -137,6 +154,9 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Pinned}" Value="True">
                                 <Setter TargetName="PinBadge" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Source}" Value="phone">
+                                <Setter TargetName="SourceBadge" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>

@@ -58,11 +58,16 @@ public partial class MainWindow : Window
             : FilterImage.IsChecked == true ? "image"
             : FilterFile.IsChecked == true ? "file"
             : null;
-        HistoryList.ItemsSource = _store.Query(SearchBox.Text, type);
+        var source = SourceLocal.IsChecked == true ? "local"
+            : SourcePhone.IsChecked == true ? "phone"
+            : null;
+        HistoryList.ItemsSource = _store.Query(SearchBox.Text, type, source);
         HistoryList.SelectedIndex = -1;
     }
 
     private void OnFilterChanged(object sender, System.Windows.RoutedEventArgs e) => Refresh();
+
+    private void OnSourceFilterChanged(object sender, System.Windows.RoutedEventArgs e) => Refresh();
 
     /// <summary>用系统默认程序打开文件（文件历史条目的双击行为）。</summary>
     private static void OpenFile(string path)
