@@ -195,12 +195,12 @@ class SyncService(private val context: Context) {
         }
     }
 
-    /** 删除条目：本地删除或彻底删除（同步删除服务器消息并广播到其他设备）。 */
+    /** 删除条目：本地删除或彻底删除（本地按 id 删保证删掉；服务器按内容哈希删并广播到其他设备）。 */
     fun deleteEntry(entry: Entry, fully: Boolean) {
         val store = AppState.store
+        store.delete(entry.id)
         if (fully) {
             val hash = store.hashForSync(entry)
-            store.deleteByHash(hash)
             scope.launch {
                 val c = client ?: return@launch
                 repeat(3) { attempt ->
@@ -208,8 +208,6 @@ class SyncService(private val context: Context) {
                     delay(3000)
                 }
             }
-        } else {
-            store.delete(entry.id)
         }
         main.post { onHistoryChanged() }
     }
