@@ -20,9 +20,13 @@ public partial class App : Application
     private OverlayWindow _overlay = null!;
     private MainWindow? _main;
     private HelpWindow? _help;
+    private SyncService? _sync;
 
     /// <summary>数据目录（%LocalAppData%\ClipboardTool），与程序分离，更新程序不丢数据。</summary>
     public string DataDir { get; private set; } = "";
+
+    /// <summary>多端同步服务（设置页登录区使用；SyncEnabled 时才启动）。</summary>
+    public SyncService? SyncService => _sync;
 
     protected override void OnStartup(StartupEventArgs e)
     {

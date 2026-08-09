@@ -29,6 +29,72 @@ public partial class SettingsWindow : Window
         HotkeyBox.PreviewKeyDown += OnHotkeyKeyDown;
         HotkeyBox.GotKeyboardFocus += (_, _) => HotkeyBox.SelectAll();
         LoadDataInfo();
+
+        SyncCheck.IsChecked = settings.SyncEnabled; // 初始选中态必须在 InitializeComponent 之后设置（XAML 时序陷阱）
+        SyncCheck.Checked += (_, _) => UpdateSyncUi();
+        SyncCheck.Unchecked += (_, _) => UpdateSyncUi();
+        SyncUserBox.Text = settings.SyncUsername;
+        SyncDeviceBox.Text = string.IsNullOrEmpty(settings.SyncDeviceName) ? Environment.MachineName : settings.SyncDeviceName;
+        UpdateSyncUi();
+    }
+
+    private SyncService? Sync => (Application.Current as App)?.SyncService;
+
+    private void UpdateSyncUi()
+    {
+        var enabled = SyncCheck.IsChecked == true;
+        SyncPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        var loggedIn = Sync?.LoggedIn == true;
+        SyncUserBox.IsEnabled = !loggedIn;
+        SyncPassBox.IsEnabled = !loggedIn;
+        SyncDeviceBox.IsEnabled = !loggedIn;
+        SyncLoginBtn.Visibility = loggedIn ? Visibility.Collapsed : Visibility.Visible;
+        SyncRegisterBtn.Visibility = loggedIn ? Visibility.Collapsed : Visibility.Visible;
+        SyncLogoutBtn.Visibility = loggedIn ? Visibility.Visible : Visibility.Collapsed;
+        if (loggedIn)
+        {
+            var s = Sync!;
+            SyncStatusText.Text = $"已登录：{s.AccountName}（{s.DeviceName}）";
+            SyncStatusText.Foreground = System.Windows.Media.Brushes.Green;
+        }
+        else
+        {
+            SyncStatusText.Text = "未登录";
+            SyncStatusText.Foreground = System.Windows.Media.Brushes.Gray;
+        }
+    }
+
+    private async void OnSyncLogin(object sender, RoutedEventArgs e)
+    {
+        var sync = Sync;
+        if (sync is null)
+            return;
+        SyncLoginBtn.IsEnabled = false;
+        SyncStatusText.Text = "登录中…";
+        var ok = await sync.LoginAsync(SyncUserBox.Text.Trim(), SyncPassBox.Password, SyncDeviceBox.Text.Trim());
+        SyncLoginBtn.IsEnabled = true;
+        SyncStatusText.Text = ok ? "已登录" : sync.StatusText;
+        UpdateSyncUi();
+    }
+
+    private async void OnSyncRegister(object sender, RoutedEventArgs e)
+    {
+        var sync = Sync;
+        if (sync is null)
+            return;
+        SyncRegisterBtn.IsEnabled = false;
+        SyncStatusText.Text = "注册中…";
+        var ok = await sync.RegisterAsync(SyncUserBox.Text.Trim(), SyncPassBox.Password, SyncDeviceBox.Text.Trim());
+        SyncRegisterBtn.IsEnabled = true;
+        SyncStatusText.Text = ok ? "已注册并登录" : sync.StatusText;
+        UpdateSyncUi();
+    }
+
+    private void OnSyncLogout(object sender, RoutedEventArgs e)
+    {
+        Sync?.Logout();
+        SyncStatusText.Text = "未登录";
+        UpdateSyncUi();
     }
 
     /// <summary>展示数据目录路径与占用大小。</summary>
@@ -162,6 +228,7 @@ public partial class SettingsWindow : Window
         _settings.AutoStart = AutoStartCheck.IsChecked == true;
         _settings.StartMenuShortcut = StartMenuCheck.IsChecked == true;
         _settings.PastePlainText = PlainCheck.IsChecked == true;
+        _settings.SyncEnabled = SyncCheck.IsChecked == true;
         _settings.Save();
         Applied = true;
         Close();
