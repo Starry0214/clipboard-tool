@@ -11,6 +11,7 @@ import com.starry.clipboardtool.net.SyncMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -99,7 +100,7 @@ class SyncService(private val context: Context) {
         client = null
     }
 
-    /** 剪贴板监听回调：读剪贴板 → 入库 → 上传。 */
+    /** 剪贴板监听回调：读剪贴板 → 入库 → 上传（去重与上传解耦，已入库未上传的内容可补传）。 */
     fun onLocalClip() {
         android.util.Log.d("ClipSync", "onLocalClip running=$running token=${AppState.token.isNotEmpty()}")
         if (!running) return
@@ -107,9 +108,14 @@ class SyncService(private val context: Context) {
         val entry = ClipboardEvents.readClip(context, clipboard, AppState.store)
         android.util.Log.d("ClipSync", "readClip -> ${entry?.type} ${entry?.content?.take(30)}")
         if (entry == null) return
-        val added = AppState.store.add(entry)
-        android.util.Log.d("ClipSync", "store.add=$added")
-        if (!added) return
+        // 防回环：App 自己写入剪贴板的内容不上传
+        if (entry.type == "text" && ClipboardEvents.suppressHash != null &&
+            ClipboardEvents.contentHash(entry.content) == ClipboardEvents.suppressHash
+        ) {
+            ClipboardEvents.suppressHash = null
+            return
+        }
+        AppState.store.add(entry)
         scope.launch {
             upload(entry)
         }
@@ -120,7 +126,11 @@ class SyncService(private val context: Context) {
         val c = client ?: return
         // 手机端只同步文字；图片/文件仅存本地历史（用户场景：电脑端复制图片/文件同步过来）
         if (entry.type != "text") return
-        c.sendClipText(entry.content)
+        // 启动窗口期 WS 未连上时延迟重试，避免入库但丢上传
+        repeat(3) { attempt ->
+            if (c.sendClipText(entry.content)) return
+            delay(3000)
+        }
     }
 
     private suspend fun applyRemote(m: SyncMessage, writeClipboard: Boolean) {
