@@ -27,8 +27,6 @@ import com.starry.clipboardtool.sync.ClipboardListener
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onLogout: () -> Unit) {
     val context = LocalContext.current
-    var server by remember { mutableStateOf(AppState.serverOverride) }
-    var status by remember { mutableStateOf("") }
     var accessEnabled by remember { mutableStateOf(ClipboardListener.isEnabled(context)) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -42,17 +40,6 @@ fun SettingsScreen(onBack: () -> Unit, onLogout: () -> Unit) {
         Button(onClick = { AppState.syncService?.logout(); onLogout() }) { Text("退出登录") }
 
         Spacer(Modifier.height(24.dp))
-        Text("服务器地址（留空用默认服务器）", style = MaterialTheme.typography.titleSmall)
-        OutlinedTextField(server, { server = it }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("如 http://127.0.0.1:8082（联调）") })
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = {
-            AppState.serverOverride = server.trim()
-            status = "已保存，重启同步生效"
-        }) { Text("保存") }
-
-        Spacer(Modifier.height(24.dp))
         Text("无障碍服务", style = MaterialTheme.typography.titleSmall)
         Text(if (accessEnabled) "已开启：剪贴板监听运行中" else "未开启：请开启以监听剪贴板",
             style = MaterialTheme.typography.bodyMedium)
@@ -63,7 +50,7 @@ fun SettingsScreen(onBack: () -> Unit, onLogout: () -> Unit) {
         }) { Text(if (accessEnabled) "重新检查" else "去开启") }
 
         Spacer(Modifier.height(24.dp))
-        Text("同步状态：${status.ifEmpty { if (AppState.token.isNotEmpty()) "已登录" else "未登录" }}",
+        Text("同步状态：${if (AppState.token.isNotEmpty()) "已登录" else "未登录"}",
             style = MaterialTheme.typography.bodyMedium)
 
         Spacer(Modifier.height(16.dp))
