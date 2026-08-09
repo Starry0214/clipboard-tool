@@ -49,18 +49,24 @@ class SyncClient(private val baseUrl: String, private val token: String) {
             "://" + baseUrl.substringAfter("://") + "/ws?token=" + token
 
     private suspend fun auth(endpoint: String, username: String, password: String, deviceName: String): AuthResult? =
-        runCatching {
+        try {
             val body = JSONObject().put("username", username).put("password", password)
                 .put("deviceName", deviceName).toString()
             http.newCall(Request.Builder()
                 .url(baseUrl.trimEnd('/') + endpoint)
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .build()).execute().use { resp ->
-                if (resp.code != 200 && resp.code != 201) return@use null
+                if (resp.code != 200 && resp.code != 201) {
+                    android.util.Log.e("ClipSync", "auth($endpoint) status=${resp.code} body=${resp.body?.string()}")
+                    return@use null
+                }
                 val o = JSONObject(resp.body?.string() ?: return@use null)
                 AuthResult(o.getLong("deviceId"), o.getString("token"))
             }
-        }.getOrNull()
+        } catch (e: Exception) {
+            android.util.Log.e("ClipSync", "auth($endpoint) failed: ${e.javaClass.simpleName}: ${e.message}")
+            null
+        }
 
     suspend fun register(username: String, password: String, deviceName: String): AuthResult? =
         auth("/api/auth/register", username, password, deviceName)

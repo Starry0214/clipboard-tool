@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class SyncService(private val context: Context) {
@@ -30,29 +31,31 @@ class SyncService(private val context: Context) {
     private fun baseUrl(): String =
         AppState.serverOverride.ifEmpty { mirrors.first() }
 
-    suspend fun login(username: String, password: String, deviceName: String): String? {
-        val auth = SyncClient(baseUrl(), "").login(username, password, deviceName)
-        return if (auth == null) "登录失败：账号不存在或密码错误"
-        else {
-            AppState.token = auth.token
-            AppState.username = username
-            AppState.deviceName = deviceName
-            AppState.deviceId = auth.deviceId
-            null
+    suspend fun login(username: String, password: String, deviceName: String): String? =
+        withContext(Dispatchers.IO) {
+            val auth = SyncClient(baseUrl(), "").login(username, password, deviceName)
+            if (auth == null) "登录失败：账号不存在或密码错误"
+            else {
+                AppState.token = auth.token
+                AppState.username = username
+                AppState.deviceName = deviceName
+                AppState.deviceId = auth.deviceId
+                null
+            }
         }
-    }
 
-    suspend fun register(username: String, password: String, deviceName: String): String? {
-        val auth = SyncClient(baseUrl(), "").register(username, password, deviceName)
-        return if (auth == null) "注册失败：无法连接服务器"
-        else {
-            AppState.token = auth.token
-            AppState.username = username
-            AppState.deviceName = deviceName
-            AppState.deviceId = auth.deviceId
-            null
+    suspend fun register(username: String, password: String, deviceName: String): String? =
+        withContext(Dispatchers.IO) {
+            val auth = SyncClient(baseUrl(), "").register(username, password, deviceName)
+            if (auth == null) "注册失败：无法连接服务器"
+            else {
+                AppState.token = auth.token
+                AppState.username = username
+                AppState.deviceName = deviceName
+                AppState.deviceId = auth.deviceId
+                null
+            }
         }
-    }
 
     fun logout() {
         stop()
@@ -98,10 +101,14 @@ class SyncService(private val context: Context) {
 
     /** 剪贴板监听回调：读剪贴板 → 入库 → 上传。 */
     fun onLocalClip() {
+        android.util.Log.d("ClipSync", "onLocalClip running=$running token=${AppState.token.isNotEmpty()}")
         if (!running) return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val entry = ClipboardEvents.readClip(context, clipboard, AppState.store) ?: return
+        val entry = ClipboardEvents.readClip(context, clipboard, AppState.store)
+        android.util.Log.d("ClipSync", "readClip -> ${entry?.type} ${entry?.content?.take(30)}")
+        if (entry == null) return
         val added = AppState.store.add(entry)
+        android.util.Log.d("ClipSync", "store.add=$added")
         if (!added) return
         scope.launch {
             upload(entry)
@@ -125,6 +132,7 @@ class SyncService(private val context: Context) {
     }
 
     private suspend fun applyRemote(m: SyncMessage, writeClipboard: Boolean) {
+        android.util.Log.d("ClipSync", "applyRemote ${m.type} seq=${m.seq} writeClip=$writeClipboard")
         val store = AppState.store
         val c = client ?: return
         when (m.type) {

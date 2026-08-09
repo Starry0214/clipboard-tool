@@ -12,11 +12,13 @@ class ClipboardListener : AccessibilityService() {
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener { onClipChanged() }
 
     private fun onClipChanged() {
-        val sync = AppState.syncService ?: return
-        if (!sync.isActive) return
+        val sync = AppState.syncService
+        android.util.Log.d("ClipSync", "clip changed, sync=${sync != null}, active=${sync?.isActive}")
+        if (sync == null || !sync.isActive) return
         // 防回环：刚由本 App 写入的剪贴板内容跳过（内容哈希命中则跳过并清除标记）
         val clip = getSystemService(ClipboardManager::class.java)
         val text = clip.primaryClip?.getItemAt(0)?.text?.toString()
+        android.util.Log.d("ClipSync", "clip text=${text?.take(30)}")
         if (text != null) {
             val h = ClipboardEvents.contentHash(text)
             if (h == ClipboardEvents.suppressHash) {
@@ -29,6 +31,7 @@ class ClipboardListener : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        android.util.Log.d("ClipSync", "accessibility service connected")
         getSystemService(ClipboardManager::class.java)
             .addPrimaryClipChangedListener(clipboardListener)
     }

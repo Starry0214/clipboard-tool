@@ -18,14 +18,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 var screen by remember { mutableStateOf("main") } // main | settings
-                val loggedIn = AppState.token.isNotEmpty()
+                var loggedIn by remember { mutableStateOf(AppState.token.isNotEmpty()) }
                 if (!loggedIn) {
-                    LoginScreen(onLoggedIn = { })
+                    LoginScreen(onLoggedIn = { loggedIn = true })
                 } else when (screen) {
                     "main" -> HistoryScreen(onOpenSettings = { screen = "settings" })
                     else -> SettingsScreen(
                         onBack = { screen = "main" },
-                        onLogout = { screen = "main" })
+                        onLogout = { loggedIn = false; screen = "main" })
                 }
             }
         }

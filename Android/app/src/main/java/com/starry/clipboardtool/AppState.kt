@@ -13,6 +13,8 @@ class AppState : Application() {
         store = LocalStore(this)
         prefs = getSharedPreferences("sync_settings", Context.MODE_PRIVATE)
         syncService = SyncService(this)
+        // 已登录则自动启动同步（重启后无需重新登录）
+        if (token.isNotEmpty()) syncService?.start()
     }
 
     companion object {

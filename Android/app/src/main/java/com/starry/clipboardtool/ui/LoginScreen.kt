@@ -33,6 +33,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var deviceName by remember { mutableStateOf(android.os.Build.MODEL) }
+    var server by remember { mutableStateOf(AppState.serverOverride) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
@@ -51,6 +52,10 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(deviceName, { deviceName = it }, label = { Text("设备名称") },
             singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(server, { server = it }, label = { Text("服务器地址（可选）") },
+            singleLine = true, modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("留空用默认服务器") })
         Spacer(Modifier.height(16.dp))
         if (busy) {
             CircularProgressIndicator()
@@ -58,6 +63,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
             androidx.compose.foundation.layout.Row {
                 Button(onClick = {
                     busy = true; status = ""
+                    AppState.serverOverride = server.trim()
                     scope.launch {
                         val err = AppState.syncService?.login(username.trim(), password, deviceName.trim())
                         status = err ?: "已登录"
@@ -68,6 +74,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 OutlinedButton(onClick = {
                     busy = true; status = ""
+                    AppState.serverOverride = server.trim()
                     scope.launch {
                         val err = AppState.syncService?.register(username.trim(), password, deviceName.trim())
                         status = err ?: "已注册并登录"
