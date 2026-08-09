@@ -3,10 +3,9 @@ package com.starry.clipboardtool.sync
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import com.starry.clipboardtool.data.Entry
 import com.starry.clipboardtool.data.LocalStore
 import java.io.File
@@ -64,30 +63,21 @@ object ClipboardEvents {
             ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
     }.getOrNull()
 
-    /** 把历史条目写回系统剪贴板；图片/文件从本地 content 文件读字节。 */
+    /** 把历史条目写回系统剪贴板；图片/文件经 FileProvider 暴露，可在任意 App 粘贴。 */
     fun writeClip(context: Context, entry: Entry, store: LocalStore) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = when (entry.type) {
             "text" -> ClipData.newPlainText("clip", entry.content)
-            "image" -> {
+            "image", "file" -> {
                 val f = File(entry.content)
                 if (!f.exists()) return
-                val bmp = BitmapFactory.decodeFile(f.absolutePath) ?: return
-                ClipData.newUri(context.contentResolver, "clip", saveTempImage(context, bmp))
+                val uri = FileProvider.getUriForFile(
+                    context, "${context.packageName}.fileprovider", f)
+                ClipData.newUri(context.contentResolver, "clip", uri)
             }
-            else -> {
-                val f = File(entry.content)
-                if (!f.exists()) return
-                ClipData.newUri(context.contentResolver, "clip", Uri.fromFile(f))
-            }
+            else -> return
         }
         suppressHash = contentHash(entry.content)
         clipboard.setPrimaryClip(clip)
-    }
-
-    private fun saveTempImage(context: Context, bmp: Bitmap): Uri {
-        val f = File(context.cacheDir, "clip_${System.currentTimeMillis()}.png")
-        f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        return Uri.fromFile(f)
     }
 }

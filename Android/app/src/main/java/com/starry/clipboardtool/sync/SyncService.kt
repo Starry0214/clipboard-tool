@@ -118,17 +118,9 @@ class SyncService(private val context: Context) {
 
     private suspend fun upload(entry: Entry) {
         val c = client ?: return
-        when (entry.type) {
-            "text" -> c.sendClipText(entry.content)
-            "image", "file" -> {
-                val f = File(entry.content)
-                if (!f.exists()) return
-                val bytes = f.readBytes()
-                val mediaId = c.uploadMedia(bytes) ?: return
-                val name = f.name
-                c.sendClipMedia(if (entry.type == "image") "clip_image" else "clip_file", mediaId, name, bytes.size.toLong())
-            }
-        }
+        // 手机端只同步文字；图片/文件仅存本地历史（用户场景：电脑端复制图片/文件同步过来）
+        if (entry.type != "text") return
+        c.sendClipText(entry.content)
     }
 
     private suspend fun applyRemote(m: SyncMessage, writeClipboard: Boolean) {
