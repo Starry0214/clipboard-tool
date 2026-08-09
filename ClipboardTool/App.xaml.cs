@@ -182,8 +182,8 @@ public partial class App : Application
         }
 
         Log.Info($"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）");
-        // 拉取更新简介（失败/为空则弹窗不带简介，不阻断更新流程）
-        var notes = await Updater.GetNotesAsync();
+        // 更新日志：优先全量 changelog（跨版本时展示所有中间版本），失败回退 notes.txt（仅最新版）
+        var notes = await Updater.GetChangelogAsync() ?? await Updater.GetNotesAsync();
         var msg = $"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）。\n" +
             (string.IsNullOrEmpty(notes) ? "" : $"\n【更新内容】\n{notes}\n") +
             "\n是否下载并安装？";

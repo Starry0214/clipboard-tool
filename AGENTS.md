@@ -34,9 +34,11 @@
 
 - 更新源（双镜像，代码自动回退）：域名 `https://code.starry0214.one/updates/` 优先 + IP `http://107.175.228.83:8080/` 兜底（`version.txt` + `ClipboardTool.exe` + 运行时安装包，SSH：`ssh -i ~/.ssh/id_ed25519 -p 1443 root@107.175.228.83`，nginx 配置 `/www/server/panel/vhost/nginx/updates.conf`）。
 - **notes.txt 只写当前版本更新内容，不累加历史**（"发现更新"弹窗会全文展示 notes.txt，`App.xaml.cs` 直接拼接）。
-- **发布不备份旧版**（用户规则：不再在服务器留 `*.bak`；发布前也不用在本地/桌面备份）。
+- **跨版本全量日志**：`changelog.txt`（Windows）与 `changelog-android.txt`（Android）按版本分块（`vX.Y.Z` 开头）累加全部历史；两端更新弹窗优先展示"当前版本之后的所有版本"日志（`Updater.GetChangelogAsync` / `Updater.changelogForNewer`），拉取失败才回退 notes.txt。**每次发版必须在对应 changelog 顶部追加新版本块**。
+- **服务器保留所有历史版本**（用户规则 2026-08-09）：发布新版本时把旧文件归档为带版本号文件名（`ClipboardTool-vX.Y.Z.exe` / `ClipboardToolApp-vX.Y.Z.apk`）保留在服务器，固定名 `ClipboardTool.exe` / `ClipboardToolApp.apk` 始终指向最新版；不在服务器留 `*.bak`。
 - **发布前必须做内嵌解压校验**（1.3.5 曾因内嵌版本错配翻车：引导器版本 1.3.5 但内嵌主程序是 1.3.4，用户更新后永远显示 1.3.4）：复制内嵌文件后确认其 FileVersion 与 csproj 一致；AOT 发布后用 `--no-restore`，再清空 `%LocalAppData%\ClipboardToolApp\` 运行新引导器，确认解压出的主程序版本与 version.txt 一致后才上传。
-- 发新版本（单文件引导器架构）：改主项目 csproj `<Version>` + Launcher csproj `<Version>`（必须一致）→ 杀进程 → 主项目 `dotnet publish -c Release --no-restore`（**`--no-restore` 免代理**；只有 NuGet 恢复才需 xray-nuget）→ 复制主程序 exe 到 `Launcher/embedded/ClipboardToolApp.exe` → Launcher `dotnet publish -c Release --no-restore`（AOT，产物 `Launcher/bin/Release/net9.0/win-x64/publish/剪贴板助手.exe`，发布前确认其 FileVersion）→ 重命名上传为 `ClipboardTool.exe` 到 `/var/www/updates/` → 更新 `version.txt` + `notes.txt`。
+- 发新版本（单文件引导器架构）：改主项目 csproj `<Version>` + Launcher csproj `<Version>`（必须一致）→ 杀进程 → 主项目 `dotnet publish -c Release --no-restore`（**`--no-restore` 免代理**；只有 NuGet 恢复才需 xray-nuget）→ 复制主程序 exe 到 `Launcher/embedded/ClipboardToolApp.exe` → Launcher `dotnet publish -c Release --no-restore`（AOT，产物 `Launcher/bin/Release/net9.0/win-x64/publish/剪贴板助手.exe`，发布前确认其 FileVersion）→ 归档旧版（`cp ClipboardTool.exe ClipboardTool-v旧版本.exe`）→ 重命名上传新 exe 为 `ClipboardTool.exe` 到 `/var/www/updates/` → 更新 `version.txt` + `notes.txt` + `changelog.txt` 顶部追加新版本块。
+- Android 发版：改 `Android/app/build.gradle.kts` 的 `versionCode`/`versionName` → `gradle :app:assembleDebug`（或 release）→ 归档旧版（`cp ClipboardToolApp.apk ClipboardToolApp-v旧版本.apk`）→ 上传为 `ClipboardToolApp.apk` → 更新 `version-android.txt` + `changelog-android.txt` 顶部追加新版本块。
 
 ## 测试
 

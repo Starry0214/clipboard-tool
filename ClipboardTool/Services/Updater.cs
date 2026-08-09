@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace ClipboardTool;
 
@@ -94,6 +95,45 @@ public static class Updater
                 };
                 var text = await http.GetStringAsync($"{baseUrl}/notes.txt");
                 return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            }
+            catch (Exception)
+            {
+                // 该镜像不可达，换下一个
+            }
+        }
+        return null;
+    }
+
+    /// <summary>拉取全量更新日志（changelog.txt，各版本分块）并筛选出高于当前版本的所有条目（最新在前）。失败返回 null。</summary>
+    public static async Task<string?> GetChangelogAsync()
+    {
+        var full = await GetRawChangelogAsync();
+        if (full is null)
+            return null;
+        var blocks = Regex.Split(full, @"(?m)^(?=v\d+\.\d+\.\d+)")
+            .Select(b => b.Trim()).Where(b => b.Length > 0).ToList();
+        var wanted = new List<string>();
+        foreach (var block in blocks)
+        {
+            var m = Regex.Match(block, @"^v(\d+\.\d+\.\d+)");
+            if (m.Success && IsNewer(m.Groups[1].Value))
+                wanted.Add(block);
+        }
+        return wanted.Count == 0 ? null : string.Join("\n\n", wanted);
+    }
+
+    private static async Task<string?> GetRawChangelogAsync()
+    {
+        foreach (var baseUrl in BaseUrls)
+        {
+            try
+            {
+                using var http = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(15) })
+                {
+                    Timeout = TimeSpan.FromSeconds(25),
+                };
+                var text = await http.GetStringAsync($"{baseUrl}/changelog.txt");
+                return string.IsNullOrWhiteSpace(text) ? null : text;
             }
             catch (Exception)
             {
