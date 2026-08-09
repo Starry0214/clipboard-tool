@@ -42,8 +42,11 @@ public partial class App : Application
 
         // 数据目录：%LocalAppData%\ClipboardTool（标准程序数据位置）；
         // 旧版同目录 data/ 首次运行时自动迁移
-        var dataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardTool");
+        // 测试钩子：--data-dir <path> 指定数据目录（联调用，隔离真实数据）
+        var dataDir = e.Args.Length >= 2 && e.Args[0] == "--data-dir"
+            ? Path.Combine(e.Args[1])
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardTool");
         var legacyDir = Path.Combine(AppContext.BaseDirectory, "data");
         if (Directory.Exists(legacyDir) && !Directory.Exists(dataDir))
         {
@@ -81,6 +84,10 @@ public partial class App : Application
         _monitor.Start(_messageWindow);
         RegisterHotkey();
         _settings.ApplyAutoStart();
+
+        _sync = new SyncService(_store, _monitor, _settings, DataDir);
+        if (_settings.SyncEnabled)
+            _ = _sync.StartAsync();
 
         // 生成窗口图标并放入全局资源（供所有窗口绑定）
         using (var iconBmp = TrayIcon.CreateIconBitmap(256))
@@ -338,6 +345,10 @@ public partial class App : Application
         _settings.ApplyAutoStart();
         _settings.ApplyStartMenuShortcut();
         RegisterHotkey();
+        if (_settings.SyncEnabled)
+            _ = _sync?.StartAsync();
+        else
+            _ = _sync?.StopAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -347,6 +358,7 @@ public partial class App : Application
         _monitor?.Stop();
         _hotkeys?.Unregister();
         _keyboardHook?.Dispose();
+        _sync?.Dispose();
         _store?.Dispose();
         base.OnExit(e);
     }
