@@ -84,7 +84,7 @@
                             </StackPanel>
                             <Button x:Name="SyncNowBtn" Content="同步服务器到本地" Style="{StaticResource FluentButtonSecondary}"
                                     Padding="14,5" FontSize="12" Margin="0,8,0,0" Click="OnSyncNow" Visibility="Collapsed"/>
-                            <TextBlock Text="删除操作不会自动同步到其他设备；点此按钮后，服务器上其他设备删除的内容才会同步到本机（本机已删的条目也可从服务器找回）。"
+                            <TextBlock Text="本地删除只影响本机（其他设备不知情，手动同步可找回）；彻底删除会同步到所有设备。点此按钮全量拉取服务器数据：应用其他设备的彻底删除，并找回本机本地删除的条目。"
                                        FontSize="11" Foreground="#888888" TextWrapping="Wrap" LineHeight="16" Margin="0,6,0,0"/>
                             <TextBlock x:Name="SyncStatusText" FontSize="12" Foreground="#C55A11"
                                        TextWrapping="Wrap" LineHeight="18" Margin="0,8,0,0"/>

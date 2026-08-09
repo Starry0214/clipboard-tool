@@ -119,8 +119,7 @@ public sealed class SyncService : IDisposable
                 {
                     if (m.Seq <= _settings.SyncLastSeq)
                         continue; // 已处理过（跨重启去重）
-                    if (m.Type != "delete")
-                        await ApplyRemote(m, isReplay: true); // 自动路径不应用删除（删除仅手动同步传播）
+                    await ApplyRemote(m, isReplay: true); // delete 只来自彻底删除，任何同步都应用
                     if (m.Seq > _settings.SyncLastSeq)
                     {
                         _settings.SyncLastSeq = m.Seq;
@@ -210,8 +209,7 @@ public sealed class SyncService : IDisposable
             if (m.Seq > 0 && m.Seq <= _settings.SyncLastSeq)
                 return; // 已处理过
             Log.Info($"同步收到消息: {m.Type} origin={m.OriginDeviceId} seq={m.Seq}");
-            if (m.Type != "delete")
-                await ApplyRemote(m, isReplay: false); // 自动路径不应用删除（删除仅手动同步传播）
+            await ApplyRemote(m, isReplay: false); // delete 只来自彻底删除，任何同步都应用
             if (m.Seq > _settings.SyncLastSeq)
             {
                 _settings.SyncLastSeq = m.Seq;
@@ -246,11 +244,14 @@ public sealed class SyncService : IDisposable
         return $"同步完成（处理 {n} 条）";
     }
 
-    /// <summary>删除条目：本地删除 + 跨端同步删除（文本/图片按内容哈希，与服务器算法一致；文件不支持跨端）。</summary>
-    public void DeleteEntry(Entry entry)
+    /// <summary>
+    /// 删除条目。fully=false 本地删除：仅删本机、服务器保留（其他设备不知情，手动同步可找回）；
+    /// fully=true 彻底删除：本地删 + 发服务器（删原消息落 delete 记录，任何端任何同步都应用删除）。
+    /// </summary>
+    public void DeleteEntry(Entry entry, bool fully)
     {
         _store.Delete(entry.Id);
-        if (!_running || _client is null)
+        if (!fully || !_running || _client is null)
             return;
         var hash = ComputeSyncHash(entry);
         if (hash is null)

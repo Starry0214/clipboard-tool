@@ -1,6 +1,6 @@
 # AGENTS.md
 
-轻量剪贴板工具（C# / .NET 9 WPF，net9.0-windows），Win+V 替代品：历史管理、图片/文本/文件预览、类型筛选、自动更新。所有开发工作都在 `ClipboardTool/` 目录内（根目录另有 `docs/compose/spec/clipboard-tool.md` 功能规格和 `.tools/` 本地测试脚本，后者被 .gitignore 忽略）。
+轻量剪贴板工具（C# / .NET 9），Win+V 替代品：历史管理、图片/文本/文件预览、类型筛选、自动更新。**两个独立项目**：`ClipboardTool/`（WPF 主程序，net9.0-windows）+ `Launcher/`（NativeAOT 单文件引导器，负责运行时检测/安装与自更新；**禁 WPF/WinForms**——进度窗口是纯 Win32 的 `ProgressWindow.cs`）。根目录另有 `docs/compose/spec/clipboard-tool.md` 功能规格和 `.tools/` 本地测试脚本（后者被 .gitignore 忽略）。
 
 ## 构建与验证（最容易踩的坑）
 
@@ -21,7 +21,7 @@
 - **Overlay 弹出位置用物理像素 + `SetWindowPos`**（cursor/WorkingArea 是物理像素，WPF Left/Top 是逻辑单位，直接赋值会在非 100% DPI 下偏移）。
 - **XAML 初始化顺序陷阱**：`IsChecked="True"` 写在 XAML 里会在 `InitializeComponent()` 期间触发事件，此时其他控件（如 ListBox）尚未创建 → NullReferenceException 闪退。初始选中态必须在构造函数 `InitializeComponent()` 之后设置。
 - csproj 移除了 WinForms/Drawing 的全局隐式 using（`Using Remove`），用到 `System.Drawing`/`System.Windows.Forms`/`System.Diagnostics`/`System.Net.Http` 的文件需显式 using。
-- 版本号由 `csproj` 的 `<Version>` 控制（当前 1.2.0），自动更新与它比较。
+- 版本号由两个 `csproj` 的 `<Version>` 控制（当前 1.3.8，**两处必须一致**），自动更新与它比较。`Launcher/embedded/ClipboardToolApp.exe`（被 gitignore）是主程序 exe 副本，解压时以实际 FileVersion 为准（`GetExeVersion` 自愈，见发布节）。
 
 ## 网络与代理（政务网）
 
@@ -36,12 +36,12 @@
 - **notes.txt 只写当前版本更新内容，不累加历史**（"发现更新"弹窗会全文展示 notes.txt，`App.xaml.cs` 直接拼接）。
 - **发布不备份旧版**（用户规则：不再在服务器留 `*.bak`；发布前也不用在本地/桌面备份）。
 - **发布前必须做内嵌解压校验**（1.3.5 曾因内嵌版本错配翻车：引导器版本 1.3.5 但内嵌主程序是 1.3.4，用户更新后永远显示 1.3.4）：复制内嵌文件后确认其 FileVersion 与 csproj 一致；AOT 发布后用 `--no-restore`，再清空 `%LocalAppData%\ClipboardToolApp\` 运行新引导器，确认解压出的主程序版本与 version.txt 一致后才上传。
-- 发新版本（单文件引导器架构）：改主项目 csproj `<Version>` + Launcher csproj `<Version>` → 杀进程 → 主项目 `dotnet publish -c Release`（需代理）→ 复制主程序 exe 到 `Launcher/embedded/ClipboardToolApp.exe` → Launcher `dotnet publish -c Release`（AOT，产物 `Launcher/bin/Release/net9.0/win-x64/publish/剪贴板助手.exe`）→ 重命名上传为 `ClipboardTool.exe` 到 `/var/www/updates/` → 更新 `version.txt`。
+- 发新版本（单文件引导器架构）：改主项目 csproj `<Version>` + Launcher csproj `<Version>`（必须一致）→ 杀进程 → 主项目 `dotnet publish -c Release --no-restore`（**`--no-restore` 免代理**；只有 NuGet 恢复才需 xray-nuget）→ 复制主程序 exe 到 `Launcher/embedded/ClipboardToolApp.exe` → Launcher `dotnet publish -c Release --no-restore`（AOT，产物 `Launcher/bin/Release/net9.0/win-x64/publish/剪贴板助手.exe`，发布前确认其 FileVersion）→ 重命名上传为 `ClipboardTool.exe` 到 `/var/www/updates/` → 更新 `version.txt` + `notes.txt`。
 
 ## 测试
 
 - 测试脚本在 `.tools/`：`overlay_ctrl.ps1`（find/esc/enter 投递按键）、`count_visible.ps1`（窗口计数）、`enum_windows2.ps1`（窗口枚举）、`check_db.py`/`check_img.py`（SQLite 查询）。
-- 程序支持测试参数：`--show-overlay`（等效热键弹出）、`--show-main`（打开主窗口）。引导器支持：`--test-progress`（运行时安装进度窗口模拟）。
+- 程序支持测试参数：`--show-overlay`（等效热键弹出）、`--show-main`（打开主窗口）。引导器支持：`--test-progress`（进度窗口模拟）、`--test-fallback`（强制走 IP 直连镜像，验证回退）。
 - **SendKeys/SendInput 注入不触发 RegisterHotKey**；`keybd_event` 注入的按键会经过低级键盘钩子（可模拟 Win+V）。
 - 崩溃排查：`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='.NET Runtime'} -MaxEvents 5`。
 - 模拟按键/剪贴板操作前先清空 `data/`（删 db + images），避免脏数据干扰判断。
