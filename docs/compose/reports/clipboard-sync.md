@@ -1,83 +1,113 @@
 ---
 feature: clipboard-sync
-status: delivered (M1 服务器端；M2 Windows/M3 Android 待建)
+status: delivered (M1 服务器端 + M2 Windows 端；M3 Android 端待建)
 specs:
   - docs/compose/spec/2026-08-09-clipboard-sync-design.md
 plans:
   - docs/compose/plans/2026-08-09-sync-server.md
+  - docs/compose/plans/2026-08-09-windows-sync.md
 branch: main
-commits: 2420ebb..b1efa95
+commits: 2420ebb..f461f62
 ---
 
-# 剪贴板跨设备同步 — 最终报告（M1 阶段）
+# 剪贴板跨设备同步 — 最终报告（M1+M2 阶段）
 
 ## What Was Built
 
-剪贴板跨设备同步的**服务器端（SyncServer）**已交付：Go 单二进制的剪贴板同步服务，提供账号注册/登录（用户名+密码，bcrypt，设备 token 认证）、WebSocket 实时消息转发（同账号多设备互推，跨账号隔离）、媒体上传下载（≤50MB，7 天保留）、历史拉取（since 过滤）、定时清理。部署形态为监听 `127.0.0.1:8082`，由 nginx 反代提供 TLS（部署属 M4）。
+剪贴板跨设备同步已交付**服务器端（SyncServer，M1）与 Windows 端改造（M2）**，实现手机与电脑剪贴板双向同步：账号注册/登录（设备 token 认证）、WebSocket 实时转发（同账号多设备互推、账号隔离）、媒体上传下载（≤50MB）、7 天短期存储与历史回放、Windows 端历史来源标签（"手机"橙色角标）与主窗口来源筛选（全部/本机/手机）、设置页末尾"实验性功能：多端同步"开关与账号登录区。
 
-整个"剪贴板跨设备同步"特性由三部分组成，本报告覆盖已交付的 M1；M2（Windows 端改造）与 M3（Android 端）计划在各自里程碑开始时生成并执行，届时更新本报告。
+同步语义：电脑复制的内容自动上传，手机端收到后写入剪贴板；手机复制的内容进入电脑历史（标注来源），用户在 Win+V 悬浮列表中选择粘贴。Windows 端只入历史不写系统剪贴板，天然无回环。**同步默认关闭**，用户在设置页勾选"多端同步（实验性）"并登录后才启用。
+
+M3（Android App）计划在后续里程碑生成，届时更新本报告。
 
 ## Architecture
 
-代码位于 `SyncServer/`（Go 1.26，模块 `syncserver`），单包多文件：
+### SyncServer（`SyncServer/`，Go 1.26 单二进制）
 
 | 文件 | 职责 |
 |------|------|
-| `main.go` | `NewApp(s *Store)` 导出构造：路由注册（Go 1.22 方法+路径模式）；`main()` 启动参数与清理任务 |
-| `store.go` | SQLite 存储层（modernc.org/sqlite 纯 Go 驱动）：users / devices / messages / media 四表，账号隔离查询 |
-| `auth.go` | 注册/登录 handler、设备 token 生成（32 随机字节 hex，存 sha256）、`requireAuth` 中间件、设备列表/解绑 |
-| `media.go` | 媒体上传下载（`Content-Length` + `LimitReader` 双重 50MB 限制，跨账号 404） |
-| `history.go` | 历史拉取 `?since=<unix_ms>` |
-| `ws.go` | Hub（`map[userID]map[*conn]bool`）+ gorilla/websocket 长连接：30s ping / 60s pong 超时、读循环落库后广播（排除来源设备） |
-| `cleanup.go` | `startCleanup`：启动即清 + 每 24h 清 `>7 天` 的 messages/media |
+| `main.go` | `NewApp(s *Store)` 路由注册；`main()` 启动参数与清理任务 |
+| `store.go` | SQLite（modernc.org/sqlite）：users/devices/messages/media 四表，账号隔离 |
+| `auth.go` | 注册/登录、设备 token（32 随机字节 hex，存 sha256）、requireAuth、设备列表/解绑 |
+| `media.go` | 上传下载（50MB 限制、跨账号 404） |
+| `history.go` | 历史拉取 `?since=<ms>`（空历史返回 `[]` 而非 null） |
+| `ws.go` | Hub + gorilla/websocket：30s ping / 60s pong 超时、落库后广播（排除来源设备） |
+| `cleanup.go` | 启动即清 + 每 24h 清 >7 天数据 |
+| `cmd/phone-sim/` | 模拟手机端联调工具（M2 新增，M4 复用） |
 
-数据流：客户端经 WS 上行 `{"type":"clip_text|clip_image|clip_file","payload":{...}}` → 服务端补 `originDeviceId/seq/ts` 落库 → 广播给同账号其他设备的连接；离线恢复走 `GET /api/history`。图片/文件先 `POST /api/media` 拿 mediaId，消息只带引用，避免大包阻塞 WS。
+### Windows 端（`ClipboardTool/`，C# WPF .NET 9）
+
+| 文件 | 职责 |
+|------|------|
+| `Services/SyncClient.cs` | 网络客户端：注册/登录、媒体上传下载、历史拉取、WS 长连接（退避重连 1s→60s、`ConfigureAwait(false)`） |
+| `Services/SyncService.cs` | 编排：`EntryCaptured` 事件上传、远端消息入库（source=phone）、`SyncLastSeq` 持久化去重、图片内容哈希去重 |
+| `Services/ClipboardMonitor.cs` | 追加 `EntryCaptured` 事件（本地捕获入库成功后触发） |
+| `Services/Entry.cs` / `ClipboardStore.cs` | `Source` 字段（local/phone）、旧库自动补列迁移、`Query(search, type, source)` |
+| `Services/Settings.cs` | `SyncEnabled`/账号字段/`SyncServerOverride`/`SyncLastSeq` |
+| `SettingsWindow` | 设置页末尾"实验性功能：多端同步"开关 + 账号区（登录/注册/退出） |
+| `OverlayWindow`/`MainWindow` | 条目右上"手机"橙色标签；主窗口来源筛选（全部/本机/手机） |
+| `App.xaml.cs` | SyncService 生命周期（SyncEnabled 启停）、`--data-dir` 测试参数 |
+
+### 关键数据流
+
+- 手机→电脑：手机复制 → 上传 → 服务器广播 → Windows `SyncService` 入库（source=phone）→ 用户从历史选择粘贴
+- 电脑→手机：本地复制 → `EntryCaptured` → 上传 → 广播 → 手机写剪贴板 + 入库
+- 重连/重启：`GET /history?since=0` 回放，`SyncLastSeq` 持久化保证跨重启不重复；图片按像素字节哈希去重、文本按内容哈希去重、文件靠 seq 去重
+- 双镜像：`https://sync.starry0214.one` 优先 + `https://107.175.228.83:8081` IP 直连兜底（跳过证书主机名校验）；`SyncServerOverride` 供本地联调
 
 ### Design Decisions
 
-- **凭证统一为设备 token**（注册/登录即完成设备登记），而非用户 token + 设备 token 两层——API/WS 单一凭证，解绑即吊销，实现最简。
-- **广播排除来源设备**而非排除来源连接——同设备多连接不会收到自己发的消息，客户端侧防回环负担最小。
-- **WS 只传轻量 JSON，二进制走 HTTP**——50MB 媒体不经过 64 条缓冲的 send channel，避免背压阻塞。
-- **`NewApp` 导出**（替代包内 `newApp`）——为 M2/M3 客户端与测试提供统一构造入口。
+- **Windows 端只入历史、不写系统剪贴板**——双向同步语义下手机端写剪贴板即可，电脑端保持"用户从历史选择"的既有交互，消除回环。
+- **SyncClient 全部 await 加 `ConfigureAwait(false)`**——网络层不捕获 UI SynchronizationContext，避免线程池/UI 互相等待。
+- **seq 持久化去重**（`SyncLastSeq` 存 settings.json）——跨重启回放精确去重，比仅靠内容哈希可靠（文件条目路径每次不同）。
+- **`--data-dir` 测试参数**——联调用隔离数据目录，不污染真实历史。
 
 ## Usage
+
+Windows 端：设置 → 勾选"多端同步（实验性）" → 输入账号/密码/设备名 → 注册或登录。再次打开设置可退出登录。
+
+服务器（M4 部署前本地联调用）：
 
 ```bash
 cd SyncServer
 go run . -addr 127.0.0.1:8082 -db sync.db
 ```
 
-| 端点 | 说明 |
-|---|---|
-| `POST /api/auth/register` | `{"username","password","deviceName"}` → 201 `{"deviceId","token"}`（用户名 ≥4，密码 ≥6） |
-| `POST /api/auth/login` | 同字段 → 200 同响应（同账号新设备） |
-| `GET /api/devices` / `DELETE /api/devices/{id}` | 设备列表 / 解绑 |
-| `POST /api/media` | raw body ≤50MB → 201 `{"mediaId"}` |
-| `GET /api/media/{id}` | 下载（仅本账号，过期/跨账号 404） |
-| `GET /api/history?since=<ms>` | 短期历史 |
-| `GET /ws?token=` | 长连接；上行 `{"type","payload"}`，下行带 `originDeviceId/seq/ts` 信封 |
-| `GET /api/health` | 健康检查 |
+模拟手机端（联调）：
 
-除 auth 外均需 `Authorization: Bearer <token>`。
+```bash
+cd SyncServer
+go run ./cmd/phone-sim -base http://127.0.0.1:8082 -user alice -pass secret123 -device phone-sim -kind text -text "hello"
+go run ./cmd/phone-sim -base http://127.0.0.1:8082 -user alice -pass secret123 -device phone-sim -kind image -media test.png
+```
 
 ## Verification
 
-`go test ./...` 全绿，共 15 个测试：健康检查、用户/设备 CRUD、消息/媒体存取、清理（含旧数据删除）、注册/登录全路径（409/400/401 分支）、requireAuth（无 token/伪造/有效）、媒体上传下载（跨账号 404、超限 413）、历史 since 过滤、WS 同账号转发（含中文、来源设备不回声）、跨账号隔离、坏 token 拒绝、启动清理。`TestSmokeEndToEnd` 端到端冒烟四步 PASS：文本互通、图片上传→转发→下载字节比对、历史拉取、跨账号隔离。`go vet ./...` 无告警。
-
-`-race` 检测因本机无 64 位 CGO 工具链（MinGW `cc1.exe` 不支持 64-bit）跳过——环境限制，非代码问题。
+- **SyncServer**：`go test ./...` 15 个测试全绿 + `TestSmokeEndToEnd` 端到端冒烟（文本/图片/历史/隔离）。
+- **Windows 端**：`dotnet build` 0 错误 0 警告；启动 exe 模拟操作验证（`--data-dir` 隔离目录）。
+- **M2 本地联调**（真实 SyncServer + exe + phone-sim 全链路）：
+  - 手机→电脑：文本/图片/文件实时推送入库，source=phone，缩略图/文件落盘正确
+  - 电脑→手机：Set-Clipboard 复制 → phone-sim 实时收到（originDeviceId 正确）
+  - 跨重启回放：history 拉取不重复（SyncLastSeq 去重）
+  - 图片内容去重：同一图片 5 次上传仅 1 条入库，重复文件不残留
+  - 防回环：本地复制条目不重复同步
+  - 空历史：服务器返回 `[]`（修复 null 后）
 
 ## Journey Log
 
 > Brief notes on what informed the final design. Not required reading.
 
-- [lesson] 计划中三处测试代码缺陷在执行时暴露并修正：重复用户名用例用了弱密码（被 400 校验提前拦截，测不到 409）；同账号第二设备误用 register（409 冲突）应改用 login；测试用户名 "bob" 仅 3 字符不满足 ≥4 校验。
-- [lesson] Go 的 `const` 不能用方法调用表达式（`time.Hour.Milliseconds()`），保留期常量改为纯毫秒字面量。
-- [lesson] `json.NewEncoder(w).Encode` 前必须显式 `WriteHeader`，否则注册 201/上传 201 会变 200（两处测试当场捕获）。
-- [lesson] `-race` 依赖 CGO 工具链，Windows 政务网环境不可用——普通测试已覆盖并发路径，联调验证依赖 M4 真机场景。
+- [lesson] **WS URL 拼接 bug**：`"ws" + host[..]` 少了 `://`，UriFormatException 静默重试——幸好加了连接日志才暴露；网络层必须有状态日志。
+- [lesson] **UI 线程死锁**：网络层 await 捕获 WPF SynchronizationContext + `GetResult()` 同步等待 → 图片下载必死锁（文本路径无恙，隐蔽性强）。修复：全部 `ConfigureAwait(false)` + async 链。联调矩阵必须覆盖"带下载的媒体路径"。
+- [lesson] **单位不一致**：服务器 ts 毫秒 vs 本地库秒——跨端协议的时间单位必须在 spec 里写明。
+- [lesson] **回放重复**：文件条目路径每次新 GUID → 哈希去重失效，须用服务器 seq 持久化去重。
+- [lesson] **Go nil slice 序列化为 null**：空历史 `{"messages":null}` 让 C# `EnumerateArray()` 抛异常返回 null——服务端空集合一律 `make([]T, 0)`。
+- [lesson] **go run 进程管理**：`go run` 实际运行的是编译出的 `syncserver` 临时进程，杀 `go` 进程不杀它，旧代码占用端口导致"修复未生效"假象。
 
 ## Source Materials
 
 | File | Role | Notes |
 |------|------|-------|
-| `docs/compose/spec/2026-08-09-clipboard-sync-design.md` | 设计 spec | S3/S4/S7 由本计划实现；S5/S6 待 M2/M3 |
-| `docs/compose/plans/2026-08-09-sync-server.md` | 实施计划 | 8 任务全部完成 |
+| `docs/compose/spec/2026-08-09-clipboard-sync-design.md` | 设计 spec | S3/S4/S7 已实现；S5 待 M3 |
+| `docs/compose/plans/2026-08-09-sync-server.md` | M1 实施计划 | 8 任务完成 |
+| `docs/compose/plans/2026-08-09-windows-sync.md` | M2 实施计划 | 8 任务完成 |
