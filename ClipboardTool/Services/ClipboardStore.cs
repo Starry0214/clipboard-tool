@@ -48,6 +48,22 @@ public sealed class ClipboardStore : IDisposable
             alter.CommandText = "ALTER TABLE entries ADD COLUMN hash TEXT NOT NULL DEFAULT ''";
             alter.ExecuteNonQuery();
         }
+        // 旧库无 source 列时补列（多端同步）
+        var hasSource = false;
+        using (var probe2 = _conn.CreateCommand())
+        {
+            probe2.CommandText = "PRAGMA table_info(entries)";
+            using var r2 = probe2.ExecuteReader();
+            while (r2.Read())
+                if (r2.GetString(1) == "source")
+                    hasSource = true;
+        }
+        if (!hasSource)
+        {
+            using var alter2 = _conn.CreateCommand();
+            alter2.CommandText = "ALTER TABLE entries ADD COLUMN source TEXT NOT NULL DEFAULT 'local'";
+            alter2.ExecuteNonQuery();
+        }
     }
 
     public int MaxEntries { get; set; } = 500;
@@ -73,8 +89,8 @@ public sealed class ClipboardStore : IDisposable
         using var cmd = _conn.CreateCommand();
         // 图片原图以文件存储（Content=文件路径），image 列不再写入
         cmd.CommandText = """
-            INSERT INTO entries (type, content, hash, thumb, pinned, created_at)
-            VALUES ($type, $content, $hash, $thumb, $pinned, $created)
+            INSERT INTO entries (type, content, hash, thumb, pinned, created_at, source)
+            VALUES ($type, $content, $hash, $thumb, $pinned, $created, $source)
             """;
         cmd.Parameters.AddWithValue("$type", e.Type);
         cmd.Parameters.AddWithValue("$content", e.Content);
@@ -82,6 +98,7 @@ public sealed class ClipboardStore : IDisposable
         cmd.Parameters.AddWithValue("$thumb", (object?)e.Thumb ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$pinned", e.Pinned ? 1 : 0);
         cmd.Parameters.AddWithValue("$created", e.CreatedAt);
+        cmd.Parameters.AddWithValue("$source", string.IsNullOrEmpty(e.Source) ? "local" : e.Source);
         cmd.ExecuteNonQuery();
 
         Trim();
@@ -144,8 +161,8 @@ public sealed class ClipboardStore : IDisposable
             TryDeleteFile(f);
     }
 
-    /// <summary>查询历史：置顶优先、时间倒序。列表查询不含原图 BLOB（仅缩略图）。type 为空表示全部类型。</summary>
-    public List<Entry> Query(string? search = null, string? type = null)
+    /// <summary>查询历史：置顶优先、时间倒序。列表查询不含原图 BLOB（仅缩略图）。type/source 为空表示全部。</summary>
+    public List<Entry> Query(string? search = null, string? type = null, string? source = null)
     {
         var list = new List<Entry>();
         using var cmd = _conn.CreateCommand();
@@ -162,9 +179,14 @@ public sealed class ClipboardStore : IDisposable
             where.Add("type = $type");
             cmd.Parameters.AddWithValue("$type", type);
         }
+        if (!string.IsNullOrEmpty(source))
+        {
+            where.Add("source = $source");
+            cmd.Parameters.AddWithValue("$source", source);
+        }
         cmd.CommandText = where.Count == 0
-            ? "SELECT id, type, content, thumb, pinned, created_at FROM entries ORDER BY pinned DESC, created_at DESC"
-            : $"SELECT id, type, content, thumb, pinned, created_at FROM entries WHERE {string.Join(" AND ", where)} ORDER BY pinned DESC, created_at DESC";
+            ? "SELECT id, type, content, thumb, pinned, created_at, source FROM entries ORDER BY pinned DESC, created_at DESC"
+            : $"SELECT id, type, content, thumb, pinned, created_at, source FROM entries WHERE {string.Join(" AND ", where)} ORDER BY pinned DESC, created_at DESC";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -176,6 +198,7 @@ public sealed class ClipboardStore : IDisposable
                 Thumb = reader.IsDBNull(3) ? null : (byte[])reader[3],
                 Pinned = reader.GetInt64(4) != 0,
                 CreatedAt = reader.GetInt64(5),
+                Source = reader.IsDBNull(6) ? "local" : reader.GetString(6),
             });
         }
         return list;
@@ -185,7 +208,7 @@ public sealed class ClipboardStore : IDisposable
     public Entry? GetById(long id)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT id, type, content, thumb, image, pinned, created_at FROM entries WHERE id = $id";
+        cmd.CommandText = "SELECT id, type, content, thumb, image, pinned, created_at, source FROM entries WHERE id = $id";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
@@ -199,6 +222,7 @@ public sealed class ClipboardStore : IDisposable
             Image = reader.IsDBNull(4) ? null : (byte[])reader[4],
             Pinned = reader.GetInt64(5) != 0,
             CreatedAt = reader.GetInt64(6),
+            Source = reader.IsDBNull(7) ? "local" : reader.GetString(7),
         };
         if (entry.Type == "image" && entry.Image is null && !string.IsNullOrEmpty(entry.Content))
         {

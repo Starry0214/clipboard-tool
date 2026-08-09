@@ -10,4 +10,5 @@ public sealed record Entry
     public byte[]? Image { get; set; }
     public bool Pinned { get; set; }
     public long CreatedAt { get; set; }
+    public string Source { get; set; } = "local"; // local | phone（同步来源）
 }
