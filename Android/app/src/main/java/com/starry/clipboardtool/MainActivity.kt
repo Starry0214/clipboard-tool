@@ -17,8 +17,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
+                var updatePrompt by remember { mutableStateOf<Pair<String, String?>?>(null) }
                 var screen by remember { mutableStateOf("main") } // main | settings
                 var loggedIn by remember { mutableStateOf(AppState.token.isNotEmpty()) }
+                updatePrompt?.let { (latest, changelog) ->
+                    UpdateDialog(latest, changelog, onDismiss = { updatePrompt = null })
+                }
+                // 启动静默检查更新（今天未提示过才弹窗）
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    UpdateChecker.checkSilent(this@MainActivity) { latest, changelog ->
+                        updatePrompt = latest to changelog
+                    }
+                }
                 if (!loggedIn) {
                     LoginScreen(onLoggedIn = { loggedIn = true })
                 } else when (screen) {
