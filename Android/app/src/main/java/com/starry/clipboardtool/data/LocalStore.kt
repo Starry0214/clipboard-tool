@@ -51,6 +51,21 @@ class LocalStore(context: Context) {
         return true
     }
 
+    /** 跨端同步用内容哈希（与服务器/Windows 算法一致：文本 type\0content、图片字节）。 */
+    fun hashForSync(e: Entry): String = hashOf(e)
+
+    /** 按内容哈希删除条目（同步删除用），并清理图片文件。 */
+    fun deleteByHash(hash: String) {
+        db.rawQuery("SELECT type, content FROM entries WHERE hash = ?", arrayOf(hash)).use { c ->
+            while (c.moveToNext()) {
+                val type = c.getString(0)
+                val content = c.getString(1)
+                if (type == "image" || type == "file") File(content).delete()
+            }
+        }
+        db.execSQL("DELETE FROM entries WHERE hash = ?", arrayOf(hash))
+    }
+
     private fun hashOf(e: Entry): String {
         val bytes = if (e.type == "image") {
             val f = File(e.content)

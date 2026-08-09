@@ -108,6 +108,19 @@ class SyncService(private val context: Context) {
         val entry = ClipboardEvents.readClip(context, clipboard, AppState.store)
         android.util.Log.d("ClipSync", "readClip -> ${entry?.type} ${entry?.content?.take(30)}")
         if (entry == null) return
+        // 同内容只同步一次（持久化）：删除条目后剪贴板内容仍在时，获焦补同步不会把它加回
+        val h = when (entry.type) {
+            "text" -> ClipboardEvents.contentHash(entry.content)
+            "image" -> AppState.store.hashForSync(entry)
+            else -> null
+        }
+        if (h != null) {
+            if (h == lastSyncedHash) {
+                android.util.Log.d("ClipSync", "skip: same as last synced")
+                return
+            }
+            lastSyncedHash = h
+        }
         // 防回环：App 自己写入剪贴板的内容不上传
         if (entry.type == "text" && ClipboardEvents.suppressHash != null &&
             ClipboardEvents.contentHash(entry.content) == ClipboardEvents.suppressHash
@@ -122,6 +135,11 @@ class SyncService(private val context: Context) {
         main.post { onHistoryChanged() }
     }
 
+    /** 最近一次同步的内容哈希（持久化，删除后防获焦补同步加回）。 */
+    private var lastSyncedHash: String?
+        get() = AppState.prefs.getString("LastSyncedHash", null)
+        set(v) = AppState.prefs.edit().putString("LastSyncedHash", v).apply()
+
     private suspend fun upload(entry: Entry) {
         val c = client ?: return
         // 手机端只同步文字；图片/文件仅存本地历史（用户场景：电脑端复制图片/文件同步过来）
@@ -133,11 +151,35 @@ class SyncService(private val context: Context) {
         }
     }
 
+    /** 删除条目：本地删除或彻底删除（同步删除服务器消息并广播到其他设备）。 */
+    fun deleteEntry(entry: Entry, fully: Boolean) {
+        val store = AppState.store
+        if (fully) {
+            val hash = store.hashForSync(entry)
+            store.deleteByHash(hash)
+            scope.launch {
+                val c = client ?: return@launch
+                repeat(3) { attempt ->
+                    if (c.sendDelete(hash)) return@launch
+                    delay(3000)
+                }
+            }
+        } else {
+            store.delete(entry.id)
+        }
+        main.post { onHistoryChanged() }
+    }
+
     private suspend fun applyRemote(m: SyncMessage, writeClipboard: Boolean) {
         android.util.Log.d("ClipSync", "applyRemote ${m.type} seq=${m.seq} writeClip=$writeClipboard")
         val store = AppState.store
         val c = client ?: return
         when (m.type) {
+            "delete" -> {
+                val hash = m.hash ?: return
+                store.deleteByHash(hash)
+                main.post { onHistoryChanged() }
+            }
             "clip_text" -> {
                 val text = m.text ?: return
                 val entry = Entry(type = "text", content = text, source = "pc",
