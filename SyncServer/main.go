@@ -38,6 +38,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer store.Close()
+	stop := make(chan struct{})
+	defer close(stop)
+	startCleanup(store, stop)
 	a := newApp()
 	a.store = store
 	log.Printf("sync server listening on %s (db=%s)", *addr, *dbPath)
