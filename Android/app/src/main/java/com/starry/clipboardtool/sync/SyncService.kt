@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 class SyncService(private val context: Context) {
-    val mirrors = listOf("https://sync.starry0214.one", "https://107.175.228.83:8081")
+    val mirrors = listOf("https://code.starry0214.one/sync", "https://107.175.228.83:8081")
     var onStatus: (String) -> Unit = {}
     var onHistoryChanged: () -> Unit = {}
     private var client: SyncClient? = null
