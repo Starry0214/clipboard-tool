@@ -8,8 +8,8 @@ namespace ClipboardTool;
 /// </summary>
 public sealed class SyncService : IDisposable
 {
-    /// <summary>同步服务器双镜像（域名 HTTPS 优先 + IP 直连兜底）。</summary>
-    public static readonly string[] DefaultMirrors = ["https://sync.starry0214.one", "https://107.175.228.83:8081"];
+    /// <summary>同步服务器双镜像（域名 HTTPS 优先 + IP 直连兜底，与更新服务同域名）。</summary>
+    public static readonly string[] DefaultMirrors = ["https://code.starry0214.one/sync", "https://107.175.228.83:8081"];
 
     private readonly ClipboardStore _store;
     private readonly ClipboardMonitor _monitor;
