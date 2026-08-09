@@ -1,5 +1,10 @@
 # 剪贴板跨设备同步设计（Android + Windows + VPS 同步服务）
 
+> [!NOTE]
+> This document may not reflect the current implementation.
+> See the final report for up-to-date state:
+> [Final Report](../reports/clipboard-sync.md)
+
 日期：2026-08-09
 状态：已获用户批准（2026-08-09）
 
@@ -106,6 +111,7 @@ JSON 信封：
 - **新增** `Services/SyncService.cs`：接入现有剪贴板监听（复制事件 → 同步上传）；收到远端消息 → 调 `ClipboardStore` 入库（source=phone）；文本直接入库，图片存 `data/images/*.png`、文件存 `data/files/`（复用现有条目模型与预览逻辑）。
 - **DB 迁移**：`clipboard_items` 加 `source` 列（'local'/'phone'，默认 'local'）；现有库自动迁移。
 - **UI**：主窗口与 overlay 列表条目显示来源标签；筛选（全部/本机/手机）；设置窗口加"账号登录"区（注册/登录/设备管理）。
+- **实验性开关（用户 2026-08-09 补充）**：设置页末尾新增"实验性功能：多端同步"开关（默认关闭）；勾选后显示账号登录区与设备管理、启动同步模块（SyncClient/SyncService）；取消勾选即停用同步（本地历史不受影响）。
 - **注意**：不改动现有 Win32 粘贴实现（`Services/Paster.cs`）、热键、悬浮窗逻辑；同步仅入历史，不自动写系统剪贴板。
 - **测试**：沿用现有模拟验证方式（无测试项目）；对测试服务器注入模拟消息验证入库与标签。
 
