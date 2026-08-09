@@ -46,7 +46,7 @@ public sealed class SyncClient : IDisposable
 
     private static string WsUrl(string baseUrl, string token) =>
         (baseUrl.StartsWith("https", StringComparison.OrdinalIgnoreCase) ? "wss" : "ws") +
-        baseUrl[(baseUrl.IndexOf("://") + 2)..] + $"/ws?token={Uri.EscapeDataString(token)}";
+        "://" + baseUrl[(baseUrl.IndexOf("://") + 3)..] + $"/ws?token={Uri.EscapeDataString(token)}";
 
     private static async Task<(long DeviceId, string Token)?> AuthAsync(string endpoint, string baseUrl,
         string username, string password, string deviceName)
@@ -60,7 +60,7 @@ public sealed class SyncClient : IDisposable
                     username, password, deviceName,
                 }), Encoding.UTF8, "application/json"),
             };
-            using var resp = await Http.SendAsync(req);
+            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
             if (resp.StatusCode != System.Net.HttpStatusCode.Created && resp.StatusCode != System.Net.HttpStatusCode.OK)
                 return null;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -88,7 +88,7 @@ public sealed class SyncClient : IDisposable
                 Content = new ByteArrayContent(data),
             };
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _token);
-            using var resp = await Http.SendAsync(req);
+            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
             if (resp.StatusCode != System.Net.HttpStatusCode.Created)
                 return null;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -106,10 +106,10 @@ public sealed class SyncClient : IDisposable
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/api/media/{mediaId}");
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _token);
-            using var resp = await Http.SendAsync(req);
+            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
             if (resp.StatusCode != System.Net.HttpStatusCode.OK)
                 return null;
-            return await resp.Content.ReadAsByteArrayAsync();
+            return await resp.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -123,7 +123,7 @@ public sealed class SyncClient : IDisposable
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/api/history?since={since}");
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _token);
-            using var resp = await Http.SendAsync(req);
+            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
             if (resp.StatusCode != System.Net.HttpStatusCode.OK)
                 return null;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -178,18 +178,20 @@ public sealed class SyncClient : IDisposable
                 using var ws = new ClientWebSocket();
                 ws.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
                 _ws = ws;
-                await ws.ConnectAsync(new Uri(WsUrl(_baseUrl, _token)), _cts.Token);
+                await ws.ConnectAsync(new Uri(WsUrl(_baseUrl, _token)), _cts.Token).ConfigureAwait(false);
                 _connected = true;
                 delay = TimeSpan.FromSeconds(1);
-                await ReadLoopAsync(ws, _cts.Token);
+                Log.Info($"同步 WS 已连接: {_baseUrl}");
+                await ReadLoopAsync(ws, _cts.Token).ConfigureAwait(false);
+                Log.Info("同步 WS 读循环退出");
             }
             catch (OperationCanceledException)
             {
                 break;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 断线/握手失败：退避重连
+                Log.Info($"同步 WS 连接失败: {ex.GetType().Name} {ex.Message}，{delay.TotalSeconds:F0}s 后重试");
             }
             finally
             {
@@ -199,7 +201,7 @@ public sealed class SyncClient : IDisposable
                 break;
             try
             {
-                await Task.Delay(delay, _cts.Token);
+                await Task.Delay(delay, _cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -219,7 +221,7 @@ public sealed class SyncClient : IDisposable
             WebSocketReceiveResult result;
             do
             {
-                result = await ws.ReceiveAsync(buffer, ct);
+                result = await ws.ReceiveAsync(buffer, ct).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                     return;
                 ms.Write(buffer, 0, result.Count);

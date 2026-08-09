@@ -99,7 +99,10 @@ public sealed class SyncService : IDisposable
     public async Task StartAsync()
     {
         if (_running || !LoggedIn)
+        {
+            Log.Info($"同步未启动: running={_running}, loggedIn={LoggedIn}");
             return;
+        }
         _running = true;
         _cts = new CancellationTokenSource();
         _client = new SyncClient(BaseUrl, _settings.SyncToken, _settings.SyncDeviceName);
@@ -111,9 +114,19 @@ public sealed class SyncService : IDisposable
             var history = await _client.FetchHistoryAsync();
             if (history is not null)
                 foreach (var m in history)
-                    ApplyRemote(m, isReplay: true);
+                {
+                    if (m.Seq <= _settings.SyncLastSeq)
+                        continue; // 已处理过（跨重启去重）
+                    await ApplyRemote(m, isReplay: true);
+                    if (m.Seq > _settings.SyncLastSeq)
+                    {
+                        _settings.SyncLastSeq = m.Seq;
+                        _settings.Save();
+                    }
+                }
             _ = _client.ConnectAsync(_cts.Token);
             SetStatus("已连接");
+            Log.Info($"同步已连接: base={BaseUrl}, history={history?.Count ?? -1}, lastSeq={_settings.SyncLastSeq}");
         }
         catch (Exception ex)
         {
@@ -185,13 +198,21 @@ public sealed class SyncService : IDisposable
         }
     }
 
-    private void OnRemoteMessage(SyncMessage m)
+    private async void OnRemoteMessage(SyncMessage m)
     {
         if (!_running)
             return;
         try
         {
-            ApplyRemote(m, isReplay: false);
+            if (m.Seq > 0 && m.Seq <= _settings.SyncLastSeq)
+                return; // 已处理过
+            Log.Info($"同步收到消息: {m.Type} origin={m.OriginDeviceId} seq={m.Seq}");
+            await ApplyRemote(m, isReplay: false);
+            if (m.Seq > _settings.SyncLastSeq)
+            {
+                _settings.SyncLastSeq = m.Seq;
+                _settings.Save();
+            }
         }
         catch (Exception ex)
         {
@@ -199,7 +220,7 @@ public sealed class SyncService : IDisposable
         }
     }
 
-    private void ApplyRemote(SyncMessage m, bool isReplay)
+    private async Task ApplyRemote(SyncMessage m, bool isReplay)
     {
         switch (m.Type)
         {
@@ -210,23 +231,23 @@ public sealed class SyncService : IDisposable
                     Type = "text",
                     Content = m.Text,
                     Source = "phone",
-                    CreatedAt = m.Ts > 0 ? m.Ts : DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    CreatedAt = m.Ts > 0 ? m.Ts / 1000 : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), // 服务器 ts 为毫秒，本地库用秒
                 };
                 _store.Add(entry);
                 break;
             }
             case "clip_image" when m.MediaId is not null:
-                ApplyRemoteMedia(m, "image");
+                await ApplyRemoteMedia(m, "image");
                 break;
             case "clip_file" when m.MediaId is not null:
-                ApplyRemoteMedia(m, "file");
+                await ApplyRemoteMedia(m, "file");
                 break;
         }
     }
 
-    private void ApplyRemoteMedia(SyncMessage m, string type)
+    private async Task ApplyRemoteMedia(SyncMessage m, string type)
     {
-        var bytes = _client?.DownloadMediaAsync(long.Parse(m.MediaId!)).GetAwaiter().GetResult();
+        var bytes = _client is null ? null : await _client.DownloadMediaAsync(long.Parse(m.MediaId!));
         if (bytes is null || bytes.Length == 0)
             return;
         var safeName = SanitizeName(m.Name ?? (type == "image" ? "image.png" : "file.bin"));
@@ -240,10 +261,14 @@ public sealed class SyncService : IDisposable
             Type = type,
             Content = localPath,
             Source = "phone",
+            Image = type == "image" ? bytes : null, // 仅用于内容哈希去重（跨回放同一图片不重复入库）
             Thumb = type == "image" ? MakeThumbBytes(bytes) : null,
-            CreatedAt = m.Ts > 0 ? m.Ts : DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            CreatedAt = m.Ts > 0 ? m.Ts / 1000 : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), // 服务器 ts 为毫秒，本地库用秒
         };
-        _store.Add(entry);
+        if (!_store.Add(entry))
+        {
+            try { File.Delete(localPath); } catch (IOException) { } // 去重未新增时清理残留文件
+        }
     }
 
     private static string SanitizeName(string name)

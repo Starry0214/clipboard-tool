@@ -127,7 +127,7 @@ func (s *Store) ListDevices(userID int64) ([]Device, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Device
+	out := make([]Device, 0)
 	for rows.Next() {
 		var d Device
 		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.TokenHash, &d.LastSeen); err != nil {
@@ -173,7 +173,7 @@ func (s *Store) MessagesSince(userID int64, since int64) ([]Message, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Message
+	out := make([]Message, 0)
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.Type, &m.OriginDeviceID, &m.Seq, &m.Ts, &m.Payload); err != nil {

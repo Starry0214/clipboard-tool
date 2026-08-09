@@ -28,6 +28,9 @@ public sealed class Settings
     /// <summary>同步服务器地址覆盖（空=内置双镜像；联调时可填 http://127.0.0.1:8082，UI 不暴露）。</summary>
     public string SyncServerOverride { get; set; } = "";
 
+    /// <summary>已处理的同步消息最大 seq（持久化去重：重启后回放跳过已处理消息）。</summary>
+    public long SyncLastSeq { get; set; }
+
     private string _path = "";
 
     public static Settings Load(string dataDir)
