@@ -10,10 +10,11 @@ import (
 type app struct {
 	mux   *http.ServeMux
 	store *Store
+	hub   *Hub
 }
 
 func newApp() *app {
-	a := &app{mux: http.NewServeMux()}
+	a := &app{mux: http.NewServeMux(), hub: newHub()}
 	a.mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
@@ -24,6 +25,7 @@ func newApp() *app {
 	a.mux.HandleFunc("POST /api/media", a.requireAuth(a.handleMediaUpload))
 	a.mux.HandleFunc("GET /api/media/{id}", a.requireAuth(a.handleMediaDownload))
 	a.mux.HandleFunc("GET /api/history", a.requireAuth(a.handleHistory))
+	a.mux.HandleFunc("GET /ws", a.handleWS)
 	return a
 }
 
