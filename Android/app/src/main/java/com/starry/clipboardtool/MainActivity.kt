@@ -30,4 +30,12 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 打开/回前台（获焦后）即同步当前剪贴板（小米后台无法监听，此为补同步；store 去重兜底）
+        if (hasFocus) {
+            AppState.syncService?.onLocalClip()
+        }
+    }
 }

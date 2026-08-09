@@ -30,17 +30,5 @@
                 <action android:name="com.starry.clipboardtool.DEBUG_SET_CLIP"/>
             </intent-filter>
         </receiver>
-        <service
-            android:name=".sync.ClipboardListener"
-            android:exported="false"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService"/>
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config"/>
-        </service>
     </application>
 </manifest>
