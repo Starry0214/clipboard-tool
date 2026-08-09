@@ -18,8 +18,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 var updatePrompt by remember { mutableStateOf<Pair<String, String?>?>(null) }
-                var screen by remember { mutableStateOf("main") } // main | settings
+                var screen by remember { mutableStateOf("main") } // main | settings | login
                 var loggedIn by remember { mutableStateOf(AppState.token.isNotEmpty()) }
+                var skippedLogin by remember { mutableStateOf(false) } // 跳过登录本地使用
                 updatePrompt?.let { (latest, changelog) ->
                     UpdateDialog(latest, changelog, onDismiss = { updatePrompt = null })
                 }
@@ -29,13 +30,17 @@ class MainActivity : ComponentActivity() {
                         updatePrompt = latest to changelog
                     }
                 }
-                if (!loggedIn) {
-                    LoginScreen(onLoggedIn = { loggedIn = true })
+                if (!loggedIn && !skippedLogin && screen != "login") {
+                    LoginScreen(onLoggedIn = { loggedIn = true; screen = "main" },
+                        onSkip = { skippedLogin = true; screen = "main" })
                 } else when (screen) {
                     "main" -> HistoryScreen(onOpenSettings = { screen = "settings" })
-                    else -> SettingsScreen(
+                    "settings" -> SettingsScreen(
                         onBack = { screen = "main" },
-                        onLogout = { loggedIn = false; screen = "main" })
+                        onLogin = { screen = "login" },
+                        onLogout = { loggedIn = false; skippedLogin = false; screen = "main" })
+                    else -> LoginScreen(onLoggedIn = { loggedIn = true; screen = "main" },
+                        onSkip = { skippedLogin = true; screen = "main" })
                 }
             }
         }
