@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">剪贴板同步</string>
+    <string name="accessibility_desc">用于监听剪贴板变化，实现剪贴板历史与多端同步。</string>
 </resources>
