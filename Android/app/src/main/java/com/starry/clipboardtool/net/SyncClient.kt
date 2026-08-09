@@ -138,18 +138,25 @@ class SyncClient(private val baseUrl: String, private val token: String) {
         }
     }
 
-    fun sendClipText(text: String) {
+    fun sendClipText(text: String): Boolean {
         val payload = JSONObject().put("text", text)
-        send("""{"type":"clip_text","payload":$payload}""")
+        return send("""{"type":"clip_text","payload":$payload}""")
     }
 
-    fun sendClipMedia(type: String, mediaId: Long, name: String, size: Long) {
+    fun sendClipMedia(type: String, mediaId: Long, name: String, size: Long): Boolean {
         val payload = JSONObject().put("mediaId", mediaId).put("name", name).put("size", size)
-        send("""{"type":"$type","payload":$payload}""")
+        return send("""{"type":"$type","payload":$payload}""")
     }
 
-    private fun send(json: String) {
-        synchronized(this) { ws }?.send(json)
+    private fun send(json: String): Boolean {
+        val ws = synchronized(this) { ws }
+        if (ws == null) return false
+        return try {
+            ws.send(json)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun close() {
