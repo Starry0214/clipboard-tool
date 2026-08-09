@@ -2,6 +2,8 @@ package com.starry.clipboardtool.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -51,6 +55,19 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
     var refresh by remember { mutableIntStateOf(0) }
     var typeFilter by remember { mutableStateOf("") } // "" | text | image | file
     var deleteTarget by remember { mutableStateOf<Entry?>(null) }
+    var selecting by remember { mutableStateOf(false) } // 多选模式
+    var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    var batchDelete by remember { mutableStateOf(false) } // 多选删除弹窗
+
+    val toggle: (Long) -> Unit = { id ->
+        selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+    }
+    val exitSelection: () -> Unit = {
+        selecting = false
+        selectedIds = emptySet()
+        batchDelete = false
+        refresh++
+    }
 
     DisposableEffect(Unit) {
         AppState.syncService?.onHistoryChanged = { refresh++ }
@@ -64,9 +81,23 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            Text("剪贴板历史", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Filled.Settings, contentDescription = "设置")
+            if (selecting) {
+                Text("已选 ${selectedIds.size} 条", style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f))
+                TextButton(onClick = {
+                    selectedIds = if (selectedIds.size == entries.size) emptySet()
+                    else entries.map { it.id }.toSet()
+                }) { Text("全选") }
+                TextButton(onClick = {
+                    selecting = false
+                    selectedIds = emptySet()
+                }) { Text("取消") }
+            } else {
+                Text("剪贴板历史", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = { selecting = true }) { Text("选择") }
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "设置")
+                }
             }
         }
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -79,7 +110,7 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
             val grouped = entries.groupBy { groupLabel(it.createdAt) }
             grouped.forEach { (label, list) ->
                 item(key = "h_$label") {
@@ -88,12 +119,33 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
                 items(list, key = { it.id }) { entry ->
-                    EntryRow(entry, onClick = {
-                        ClipboardEvents.writeClip(context, entry, AppState.store)
-                        Toast.makeText(context, "已写入剪贴板", Toast.LENGTH_SHORT).show()
-                    }, onLongClick = {
-                        deleteTarget = entry
-                    })
+                    if (selecting) {
+                        val checked = entry.id in selectedIds
+                        EntryRow(entry,
+                            trailing = {
+                                Box(
+                                    Modifier.size(22.dp)
+                                        .border(1.5.dp,
+                                            if (checked) MaterialTheme.colorScheme.primary else Color(0xFFB0B0B0),
+                                            CircleShape)
+                                        .clickable { toggle(entry.id) },
+                                    contentAlignment = Alignment.Center) {
+                                    if (checked)
+                                        Icon(Icons.Filled.Check, contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp))
+                                }
+                            },
+                            onClick = { toggle(entry.id) },
+                            onLongClick = { toggle(entry.id) })
+                    } else {
+                        EntryRow(entry, onClick = {
+                            ClipboardEvents.writeClip(context, entry, AppState.store)
+                            Toast.makeText(context, "已写入剪贴板", Toast.LENGTH_SHORT).show()
+                        }, onLongClick = {
+                            deleteTarget = entry
+                        })
+                    }
                 }
             }
             if (entries.isEmpty()) {
@@ -103,9 +155,19 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                 }
             }
         }
+        // 多选模式底部操作栏
+        if (selecting) {
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { batchDelete = true },
+                    enabled = selectedIds.isNotEmpty()) { Text("删除") }
+            }
+        }
     }
 
-    // 长按删除对话框：本地删除 / 彻底删除（同步删除服务器与其他设备）
+    // 单条长按删除对话框：本地删除 / 彻底删除（同步删除服务器与其他设备）
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -132,11 +194,45 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                 }
             })
     }
+
+    // 多选批量删除对话框
+    if (batchDelete) {
+        val selected = entries.filter { it.id in selectedIds }
+        val hasFile = selected.any { it.type == "file" }
+        AlertDialog(
+            onDismissRequest = { batchDelete = false },
+            title = { Text("删除 ${selected.size} 条记录") },
+            text = {
+                Text(if (hasFile)
+                    "本地删除：仅移除本机记录。\n彻底删除：文本/图片同步移除服务器与其他设备上的相同内容（文件条目仅本地删除）。"
+                else
+                    "本地删除：仅移除本机记录。\n彻底删除：同步移除服务器与其他设备上的相同内容。")
+            },
+            confirmButton = {
+                Row {
+                    if (!hasFile) {
+                        TextButton(onClick = {
+                            selected.forEach { AppState.syncService?.deleteEntry(it, fully = true) }
+                            exitSelection()
+                        }) { Text("彻底删除") }
+                    }
+                    TextButton(onClick = {
+                        selected.forEach { entry ->
+                            // 文件条目无法跨端彻底删除，固定本地删除
+                            AppState.syncService?.deleteEntry(entry, fully = entry.type != "file")
+                        }
+                        exitSelection()
+                    }) { Text("本地删除") }
+                    TextButton(onClick = { batchDelete = false }) { Text("取消") }
+                }
+            })
+    }
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun EntryRow(entry: Entry, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun EntryRow(entry: Entry, onClick: () -> Unit, onLongClick: () -> Unit,
+                     trailing: (@Composable () -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -169,6 +265,7 @@ private fun EntryRow(entry: Entry, onClick: () -> Unit, onLongClick: () -> Unit)
                 Text("电脑", color = Color(0xFF0078D4), style = MaterialTheme.typography.labelSmall)
             }
         }
+        trailing?.invoke()
     }
 }
 
