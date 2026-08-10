@@ -74,35 +74,45 @@
                         </Grid>
                     </RadioButton>
                     <Rectangle Width="1" Height="16" Fill="#DDDDDD" Margin="8,0"/>
-                    <Border x:Name="SourceFilterPanel" Background="#F0F1F3" CornerRadius="7" Padding="2">
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton x:Name="SourceAll" GroupName="SourceFilter"
-                                         Style="{StaticResource FilterIconButton}"
-                                         ToolTip="显示全部来源" IsChecked="True" Checked="OnSourceFilterChanged">
-                                <Grid Width="18" Height="18">
-                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.6" RadiusX="1.5" RadiusY="1.5" Fill="Transparent"/>
-                                    <Line X1="9" Y1="2" X2="9" Y2="16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4"/>
-                                    <Line X1="2" Y1="9" X2="16" Y2="9" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4"/>
+                    <!-- 来源筛选：单图标三态（全部/手机/电脑），单击循环切换，右键菜单直接选择 -->
+                    <Border x:Name="SourceFilterPanel" Background="#F0F1F3" CornerRadius="7" Padding="2" Visibility="Collapsed">
+                        <Button x:Name="SourceFilterBtn" Style="{StaticResource SourceFilterBtnStyle}"
+                                ToolTip="全部来源 — 单击切换（全部→手机→电脑），右键直接选择"
+                                Click="OnSourceFilterCycle" Padding="2,0">
+                            <Button.ContextMenu>
+                                <ContextMenu Style="{StaticResource FluentContextMenu}" Opened="OnSourceMenuOpened">
+                                    <ContextMenu.Resources>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource FluentMenuItem}"/>
+                                        <Style TargetType="Separator" BasedOn="{StaticResource FluentMenuSeparator}"/>
+                                    </ContextMenu.Resources>
+                                    <MenuItem x:Name="SourceMenuAll" Header="显示全部来源" Tag="all" Click="OnSourceMenuSelect"/>
+                                    <MenuItem x:Name="SourceMenuLocal" Header="只看本机复制" Tag="local" Click="OnSourceMenuSelect"/>
+                                    <MenuItem x:Name="SourceMenuPhone" Header="只看手机同步" Tag="phone" Click="OnSourceMenuSelect"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                            <Grid Width="24" Height="20">
+                                <Grid x:Name="SourceIconAll" Visibility="Visible">
+                                    <!-- 手机 Path（左侧，x=2-7, y=3-15） -->
+                                    <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Fill="Transparent" Stretch="None" StrokeLineJoin="Round"
+                                          Data="M 3,3 H 6 Q 7,3 7,4 V 13 Q 7,14 6,14 H 3 Q 2,14 2,13 V 4 Q 2,3 3,3 Z M 3.5,12 H 5.5"/>
+                                    <!-- 中间分隔竖线（x=10） -->
+                                    <Line X1="10" Y1="3" X2="10" Y2="17" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2"/>
+                                    <!-- 显示器 Path（右侧，x=13-22, y=4-14 + 支架底座） -->
+                                    <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Fill="Transparent" Stretch="None" StrokeLineJoin="Round"
+                                          Data="M 14,4 H 21 Q 22,4 22,5 V 11 Q 22,12 21,12 H 14 Q 13,12 13,11 V 5 Q 13,4 14,4 Z M 17.5,12 V 14.5 M 15,14.5 H 20"/>
                                 </Grid>
-                            </RadioButton>
-                            <RadioButton x:Name="SourceLocal" GroupName="SourceFilter"
-                                         Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
-                                         ToolTip="只看本机复制" Checked="OnSourceFilterChanged">
-                                <Grid Width="20" Height="18">
-                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" RadiusX="1.5" RadiusY="1.5" Width="16" Height="11" Fill="Transparent" HorizontalAlignment="Center" VerticalAlignment="Top"/>
-                                    <Line X1="5" Y1="13" X2="15" Y2="13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Top"/>
-                                    <Line X1="9" Y1="16" X2="11" Y2="16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                <Grid x:Name="SourceIconPhone" Visibility="Collapsed">
+                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" RadiusX="2" RadiusY="2" Width="10" Height="17" Fill="Transparent" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Line X1="10" Y1="16" X2="14" Y2="16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2"/>
                                 </Grid>
-                            </RadioButton>
-                            <RadioButton x:Name="SourcePhone" GroupName="SourceFilter"
-                                         Style="{StaticResource FilterIconButton}" Margin="4,0,0,0"
-                                         ToolTip="只看手机同步" Checked="OnSourceFilterChanged">
-                                <Grid Width="12" Height="20">
-                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.5" RadiusX="2" RadiusY="2" Width="9" Height="17" Fill="Transparent" HorizontalAlignment="Center" VerticalAlignment="Top"/>
-                                    <Line X1="6" Y1="15" X2="6" Y2="17" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                <Grid x:Name="SourceIconLocal" Visibility="Collapsed">
+                                    <!-- 显示器：宽屏+支架+底座（原始粗细） -->
+                                    <Rectangle Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" RadiusX="1" RadiusY="1" Width="18" Height="11" Fill="Transparent" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,1,0,0"/>
+                                    <Line X1="12" Y1="12" X2="12" Y2="15.5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4"/>
+                                    <Line X1="8" Y1="15.5" X2="16" Y2="15.5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5"/>
                                 </Grid>
-                            </RadioButton>
-                        </StackPanel>
+                            </Grid>
+                        </Button>
                     </Border>
                 </StackPanel>
             </Grid>
@@ -122,15 +132,32 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <Grid x:Name="Root" MinHeight="30">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- 来源/置顶标签：内容左侧竖直排布，不遮挡文本（原右上角悬浮会盖住文字） -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Border x:Name="SourceBadge" Visibility="Collapsed"
+                                        Background="#FFF4E5" CornerRadius="4" Padding="4,2"
+                                        Margin="0,0,4,0" VerticalAlignment="Center">
+                                    <TextBlock Text="手机" FontSize="10" Foreground="#C55A11" FontWeight="SemiBold"/>
+                                </Border>
+                                <Border x:Name="PinBadge" Visibility="Collapsed"
+                                        Background="#E8F0FE" CornerRadius="4" Padding="4,2"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="置顶" FontSize="10" Foreground="#0078D4" FontWeight="SemiBold"/>
+                                </Border>
+                            </StackPanel>
                             <!-- 图片条目：缩略图 -->
-                            <StackPanel x:Name="ImagePanel" Orientation="Horizontal" Visibility="Collapsed">
+                            <StackPanel Grid.Column="1" x:Name="ImagePanel" Orientation="Horizontal" Visibility="Collapsed">
                                 <Border CornerRadius="6" ClipToBounds="True" BorderBrush="#E8E8E8" BorderThickness="1">
                                     <Image Source="{Binding Thumb, Converter={StaticResource ThumbConverter}}"
                                            Stretch="Uniform"/>
                                 </Border>
                             </StackPanel>
                             <!-- 文件条目：图标 + 路径（两行换行完整显示） -->
-                            <StackPanel x:Name="FilePanel" Orientation="Horizontal" Visibility="Collapsed">
+                            <StackPanel Grid.Column="1" x:Name="FilePanel" Orientation="Horizontal" Visibility="Collapsed">
                                 <Border Background="#E8F0FE" CornerRadius="6" Width="28" Height="28"
                                         Margin="0,0,8,0" VerticalAlignment="Center">
                                     <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -142,25 +169,13 @@
                                            TextWrapping="Wrap" LineHeight="19" MaxHeight="38" MaxWidth="300"
                                            FontSize="13" VerticalAlignment="Center" Foreground="#1A1A1A"/>
                             </StackPanel>
-                            <TextBlock x:Name="TextLine"
+                            <TextBlock Grid.Column="1" x:Name="TextLine"
                                        Text="{Binding Content}"
                                        TextWrapping="Wrap"
                                        LineHeight="19"
                                        MaxHeight="38"
                                        TextTrimming="CharacterEllipsis"
                                        FontSize="13" VerticalAlignment="Center" Foreground="#1A1A1A"/>
-                            <!-- 来源标签 + 置顶角标 -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,4,0">
-                                <Border x:Name="SourceBadge" Visibility="Collapsed"
-                                        Background="#FFF4E5" CornerRadius="4" Padding="4,2"
-                                        Margin="0,0,4,0">
-                                    <TextBlock Text="手机" FontSize="10" Foreground="#C55A11" FontWeight="SemiBold"/>
-                                </Border>
-                                <Border x:Name="PinBadge" Visibility="Collapsed"
-                                        Background="#E8F0FE" CornerRadius="4" Padding="4,2">
-                                    <TextBlock Text="置顶" FontSize="10" Foreground="#0078D4" FontWeight="SemiBold"/>
-                                </Border>
-                            </StackPanel>
                         </Grid>
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding Type}" Value="image">

@@ -23,6 +23,8 @@ public partial class OverlayWindow : Window
     private readonly RectangleGeometry _clip = new();
     private Storyboard? _anim;
     private bool _hiding;
+    /// <summary>来源筛选状态：""=全部、"local"=本机、"phone"=手机。</summary>
+    private string _sourceFilter = "";
 
     public OverlayWindow(ClipboardStore store, ClipboardMonitor monitor, Settings settings)
     {
@@ -31,6 +33,9 @@ public partial class OverlayWindow : Window
         _monitor = monitor;
         _settings = settings;
         FilterAll.IsChecked = true; // 默认"全部"（在 InitializeComponent 之后设置，避免 XAML 初始化时控件未就绪）
+        // 未开启多端同步时来源筛选无意义，隐藏（与主窗口一致）
+        SourceFilterPanel.Visibility = _settings.SyncEnabled ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSourceIcon();
         Clip = _clip;
         // 失焦延迟确认关闭：给快速 Win+V 重按留出窗口，避免 Win 键失焦抢先吞掉动画
         _closeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
@@ -181,6 +186,57 @@ public partial class OverlayWindow : Window
 
     private void OnFilterChanged(object sender, System.Windows.RoutedEventArgs e) => Reload();
 
+    /// <summary>单击循环切换来源：全部 → 手机 → 本机 → 全部。</summary>
+    private void OnSourceFilterCycle(object sender, System.Windows.RoutedEventArgs e)
+    {
+        _sourceFilter = _sourceFilter switch
+        {
+            "" => "phone",
+            "phone" => "local",
+            _ => "",
+        };
+        UpdateSourceIcon();
+        Reload();
+    }
+
+    private void OnSourceMenuOpened(object sender, RoutedEventArgs e)
+    {
+        // 菜单打开（控件已加载）后预选当前状态对应的菜单项（视觉反馈）
+        if (SourceMenuAll is not null)
+            SourceMenuAll.IsChecked = _sourceFilter == "";
+        if (SourceMenuLocal is not null)
+            SourceMenuLocal.IsChecked = _sourceFilter == "local";
+        if (SourceMenuPhone is not null)
+            SourceMenuPhone.IsChecked = _sourceFilter == "phone";
+    }
+
+    private void OnSourceMenuSelect(object sender, System.Windows.RoutedEventArgs e)
+    {
+        _sourceFilter = sender switch
+        {
+            System.Windows.Controls.MenuItem { Tag: "local" } => "local",
+            System.Windows.Controls.MenuItem { Tag: "phone" } => "phone",
+            _ => "",
+        };
+        UpdateSourceIcon();
+        Reload();
+    }
+
+    /// <summary>切换图标三态显示并更新悬浮提示（当前状态 + 操作说明）。</summary>
+    private void UpdateSourceIcon()
+    {
+        SourceIconAll.Visibility = _sourceFilter == "" ? Visibility.Visible : Visibility.Collapsed;
+        SourceIconPhone.Visibility = _sourceFilter == "phone" ? Visibility.Visible : Visibility.Collapsed;
+        SourceIconLocal.Visibility = _sourceFilter == "local" ? Visibility.Visible : Visibility.Collapsed;
+        var state = _sourceFilter switch
+        {
+            "" => "全部来源",
+            "local" => "只看本机复制",
+            _ => "只看手机同步",
+        };
+        SourceFilterBtn.ToolTip = $"{state} — 单击切换（全部→手机→本机），右键直接选择";
+    }
+
     /// <summary>用系统默认程序打开文件（文件历史条目的双击行为）。</summary>
     private static void OpenFile(string path)
     {
@@ -202,7 +258,8 @@ public partial class OverlayWindow : Window
             : FilterImage.IsChecked == true ? "image"
             : FilterFile.IsChecked == true ? "file"
             : null;
-        var items = _store.Query(SearchBox.Text, type);
+        var source = _sourceFilter.Length > 0 ? _sourceFilter : null;
+        var items = _store.Query(SearchBox.Text, type, source);
         HistoryList.ItemsSource = items;
         HistoryList.SelectedIndex = items.Count > 0 ? 0 : -1;
     }

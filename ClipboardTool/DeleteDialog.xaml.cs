@@ -18,7 +18,11 @@ public partial class DeleteDialog : Window
         var preview = entry.Type == "image" ? "[图片]" :
             entry.Type == "file" ? System.IO.Path.GetFileName(entry.Content) :
             (entry.Content.Length > 40 ? entry.Content[..40] + "…" : entry.Content);
-        HintText.Text = $"“{preview}”\n\n本地删除：只在本机删除，不影响其他设备（手动同步可找回）\n彻底删除：所有设备同步删除（不可找回）";
+        // 未登录时同步不可用，彻底删除无意义：隐藏按钮，提示只讲本地删除
+        var loggedIn = (Application.Current as App)?.SyncService?.LoggedIn == true;
+        FullDeleteBtn.Visibility = loggedIn ? Visibility.Visible : Visibility.Collapsed;
+        var fullHint = loggedIn ? "\n彻底删除：所有设备同步删除（不可找回）" : "";
+        HintText.Text = $"“{preview}”\n\n本地删除：只在本机删除，不影响其他设备（手动同步可找回）{fullHint}";
     }
 
     private void OnLocalDelete(object sender, RoutedEventArgs e)

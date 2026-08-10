@@ -42,6 +42,7 @@
 
 ## 测试
 
+- **防执行卡死（用户强规则 2026-08-09）**：① `uiautomator dump` 后禁止 cat 整份 XML——`adb pull` 到本地用 python 只提取 text/bounds；② bash 命令一律设合理 timeout（普通 30-60s、构建 300s，禁 600s+ 干等）；③ 禁止 `;` 串联命令掩盖失败（用 `&&` 明确依赖）；④ Android 构建用 `--offline` 免 maven 联网检查（政务网超时会挂起）；⑤ 长输出命令用 `Select-String` 过滤。
 - 测试脚本在 `.tools/`：`overlay_ctrl.ps1`（find/esc/enter 投递按键）、`count_visible.ps1`（窗口计数）、`enum_windows2.ps1`（窗口枚举）、`check_db.py`/`check_img.py`（SQLite 查询）。
 - 程序支持测试参数：`--show-overlay`（等效热键弹出）、`--show-main`（打开主窗口）。引导器支持：`--test-progress`（进度窗口模拟）、`--test-fallback`（强制走 IP 直连镜像，验证回退）。
 - **SendKeys/SendInput 注入不触发 RegisterHotKey**；`keybd_event` 注入的按键会经过低级键盘钩子（可模拟 Win+V）。

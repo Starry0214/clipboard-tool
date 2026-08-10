@@ -42,6 +42,8 @@ public sealed class SyncClient : IDisposable
     }
 
     public event Action<SyncMessage>? MessageReceived;
+    /// <summary>WS 连接（含重连）成功后触发：订阅方可补拉断线期间错过的历史。</summary>
+    public event Action? Reconnected;
     public bool Connected => _connected;
 
     private static string WsUrl(string baseUrl, string token) =>
@@ -183,6 +185,7 @@ public sealed class SyncClient : IDisposable
                 _connected = true;
                 delay = TimeSpan.FromSeconds(1);
                 Log.Info($"同步 WS 已连接: {_baseUrl}");
+                Reconnected?.Invoke(); // 首次连接与断线重连都会触发，订阅方据此增量补拉
                 await ReadLoopAsync(ws, _cts.Token).ConfigureAwait(false);
                 Log.Info("同步 WS 读循环退出");
             }

@@ -13,7 +13,7 @@
         <TextBlock x:Name="HintText" FontSize="12" Foreground="#666666" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,16"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="本地删除" Style="{StaticResource FluentButton}" Padding="14,6" Click="OnLocalDelete"/>
-            <Button Content="彻底删除" Style="{StaticResource FluentButtonSecondary}" Padding="14,6" Margin="8,0,0,0" Click="OnFullDelete"/>
+            <Button x:Name="FullDeleteBtn" Content="彻底删除" Style="{StaticResource FluentButtonSecondary}" Padding="14,6" Margin="8,0,0,0" Click="OnFullDelete"/>
             <Button Content="取消" Style="{StaticResource FluentButtonSecondary}" Padding="14,6" Margin="8,0,0,0" IsCancel="True"/>
         </StackPanel>
     </StackPanel>

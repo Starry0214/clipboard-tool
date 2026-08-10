@@ -91,7 +91,12 @@ public sealed class SyncService : IDisposable
     public void Logout()
     {
         _cts?.Cancel();
-        _client?.Dispose();
+        if (_client is not null)
+        {
+            _client.MessageReceived -= OnRemoteMessage;
+            _client.Reconnected -= OnReconnected;
+            _client.Dispose();
+        }
         _client = null;
         _settings.SyncToken = "";
         _settings.Save();
@@ -109,6 +114,7 @@ public sealed class SyncService : IDisposable
         _cts = new CancellationTokenSource();
         _client = new SyncClient(BaseUrl, _settings.SyncToken, _settings.SyncDeviceName);
         _client.MessageReceived += OnRemoteMessage;
+        _client.Reconnected += OnReconnected;
         _monitor.EntryCaptured += OnLocalCaptured;
         SetStatus("连接中…");
         try
@@ -143,7 +149,12 @@ public sealed class SyncService : IDisposable
         _running = false;
         _monitor.EntryCaptured -= OnLocalCaptured;
         _cts?.Cancel();
-        _client?.Dispose();
+        if (_client is not null)
+        {
+            _client.MessageReceived -= OnRemoteMessage;
+            _client.Reconnected -= OnReconnected;
+            _client.Dispose();
+        }
         _client = null;
         SetStatus("已停用");
         await Task.CompletedTask;
@@ -220,6 +231,43 @@ public sealed class SyncService : IDisposable
         {
             Log.Error("同步消息入库失败", ex);
         }
+    }
+
+    /// <summary>WS 连接/重连成功后增量补拉：拉取服务器历史并应用 seq > lastSeq 的消息，
+    /// 补上断线窗口期错过的内容（重连只等新消息，不补历史会漏）。服务器 history 按 ts 过滤，
+    /// 客户端传 seq 时返回全量，靠 seq 去重与应用幂等（Add 哈希去重 / delete 幂等）兜底。</summary>
+    private void OnReconnected()
+    {
+        if (!_running || _client is null)
+            return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var history = await _client!.FetchHistoryAsync(_settings.SyncLastSeq);
+                if (history is null)
+                    return;
+                long maxSeq = _settings.SyncLastSeq;
+                foreach (var m in history)
+                {
+                    if (m.Seq > 0 && m.Seq <= _settings.SyncLastSeq)
+                        continue; // 已处理过
+                    await ApplyRemote(m, isReplay: true); // delete 只来自彻底删除，任何同步都应用
+                    if (m.Seq > maxSeq)
+                        maxSeq = m.Seq;
+                }
+                if (maxSeq > _settings.SyncLastSeq)
+                {
+                    _settings.SyncLastSeq = maxSeq;
+                    _settings.Save();
+                }
+                Log.Info($"同步补拉完成: 处理 {history.Count} 条, lastSeq={maxSeq}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("同步补拉失败", ex);
+            }
+        });
     }
 
     /// <summary>手动同步服务器到本地：全量拉取（含 delete 记录）并应用——删除仅在此路径传播；本地已删条目可从服务器找回。</summary>
@@ -357,7 +405,12 @@ public sealed class SyncService : IDisposable
     public void Dispose()
     {
         _cts?.Cancel();
-        _client?.Dispose();
+        if (_client is not null)
+        {
+            _client.MessageReceived -= OnRemoteMessage;
+            _client.Reconnected -= OnReconnected;
+            _client.Dispose();
+        }
         _monitor.EntryCaptured -= OnLocalCaptured;
     }
 }
