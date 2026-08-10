@@ -25,6 +25,9 @@ class SyncClient(private val baseUrl: String, private val token: String) {
     private val http: OkHttpClient = buildHttpClient()
     private var ws: WebSocket? = null
     private var running = false
+    /** WS 是否完成握手（onOpen 才为 true）；未握手时 send 会假成功丢消息，必须以此为准。 */
+    @Volatile
+    private var connected = false
 
     private fun buildHttpClient(): OkHttpClient {
         val trustAll = object : X509TrustManager {
@@ -114,12 +117,22 @@ class SyncClient(private val baseUrl: String, private val token: String) {
                 val ok = runCatching {
                     val req = Request.Builder().url(wsUrl()).build()
                     val listener = object : WebSocketListener() {
+                        override fun onOpen(webSocket: WebSocket, response: Response) {
+                            connected = true
+                            onStatus("已连接")
+                        }
                         override fun onMessage(webSocket: WebSocket, text: String) {
                             onMessage(parseSyncMessage(text))
                         }
                         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                            onStatus("连接断开，重连中…")
+                            connected = false
                             synchronized(this@SyncClient) { ws = null }
+                            onStatus("连接断开，重连中…")
+                        }
+                        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                            connected = false
+                            synchronized(this@SyncClient) { ws = null }
+                            onStatus("连接断开，重连中…")
                         }
                     }
                     synchronized(this@SyncClient) { ws = http.newWebSocket(req, listener) }
@@ -131,7 +144,6 @@ class SyncClient(private val baseUrl: String, private val token: String) {
                     delayMs = (delayMs * 2).coerceAtMost(60_000)
                 } else {
                     delayMs = 1000L
-                    onStatus("已连接")
                     while (running && ws != null) delay(1000)
                 }
             }
@@ -154,6 +166,7 @@ class SyncClient(private val baseUrl: String, private val token: String) {
     }
 
     private fun send(json: String): Boolean {
+        if (!connected) return false
         val ws = synchronized(this) { ws }
         if (ws == null) return false
         return try {
@@ -166,6 +179,7 @@ class SyncClient(private val baseUrl: String, private val token: String) {
 
     fun close() {
         running = false
+        connected = false
         synchronized(this) { ws }?.close(1000, null)
     }
 }

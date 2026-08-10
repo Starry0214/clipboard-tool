@@ -142,12 +142,9 @@ class SyncService(private val context: Context) {
             "image" -> AppState.store.hashForSync(entry)
             else -> null
         }
-        if (h != null) {
-            if (h == lastSyncedHash) {
-                android.util.Log.d("ClipSync", "skip: same as last synced")
-                return
-            }
-            lastSyncedHash = h
+        if (h != null && h == lastSyncedHash) {
+            android.util.Log.d("ClipSync", "skip: same as last synced")
+            return
         }
         // 防回环：App 自己写入剪贴板的内容不上传
         if (entry.type == "text" && ClipboardEvents.suppressHash != null &&
@@ -157,8 +154,18 @@ class SyncService(private val context: Context) {
             return
         }
         AppState.store.add(entry)
-        scope.launch {
-            upload(entry)
+        if (entry.type == "text") {
+            scope.launch {
+                if (upload(entry)) {
+                    // 上传成功才记录，失败不标记——WS 未就绪/断线时获焦重试不会因 hash 去重被永久跳过
+                    lastSyncedHash = h
+                } else {
+                    android.util.Log.w("ClipSync", "upload failed, will retry on next focus")
+                }
+            }
+        } else if (h != null) {
+            // 图片/文件不上传服务器，入库即视为已处理（防删除后剪贴板内容仍在时获焦加回）
+            lastSyncedHash = h
         }
         main.post { onHistoryChanged() }
     }
@@ -184,15 +191,18 @@ class SyncService(private val context: Context) {
         get() = AppState.prefs.getString("LastSyncedHash", null)
         set(v) = AppState.prefs.edit().putString("LastSyncedHash", v).apply()
 
-    private suspend fun upload(entry: Entry) {
-        val c = client ?: return
+    /** 上传手机剪贴板文本到服务器；WS 未连上时延迟重试 3 次，全部失败返回 false（调用方不标记已同步）。 */
+    private suspend fun upload(entry: Entry): Boolean {
+        val c = client ?: return false
         // 手机端只同步文字；图片/文件仅存本地历史（用户场景：电脑端复制图片/文件同步过来）
-        if (entry.type != "text") return
+        if (entry.type != "text") return false
         // 启动窗口期 WS 未连上时延迟重试，避免入库但丢上传
         repeat(3) { attempt ->
-            if (c.sendClipText(entry.content)) return
+            if (c.sendClipText(entry.content)) return true
+            android.util.Log.w("ClipSync", "upload attempt ${attempt + 1} failed (ws not ready?)")
             delay(3000)
         }
+        return false
     }
 
     /** 删除条目：本地删除或彻底删除（本地按 id 删保证删掉；服务器按内容哈希删并广播到其他设备）。 */
