@@ -33,6 +33,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -66,7 +67,10 @@ import com.starry.clipboardtool.ui.theme.PcBadge
 import com.starry.clipboardtool.ui.theme.PcBadgeDark
 import com.starry.clipboardtool.ui.theme.PhoneBadge
 import com.starry.clipboardtool.ui.theme.PhoneBadgeDark
+import com.starry.clipboardtool.util.MediaSaver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -240,16 +244,35 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
         }
     }
 
-    // 单条长按删除对话框：本地删除 / 彻底删除（同步删除服务器与其他设备）
+    // 单条长按对话框：保存到下载（图片/文件）/ 本地删除 / 彻底删除（同步删除服务器与其他设备）
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除条目") },
+            title = { Text("条目操作") },
             text = {
-                Text(if (target.type == "file")
-                    "文件条目仅支持本地删除（文件无法跨端彻底删除）。"
-                else
-                    "本地删除：仅移除本机记录。\n彻底删除：同步移除服务器与其他设备上的相同内容。")
+                Column {
+                    Text(if (target.type == "file")
+                        "文件条目仅支持本地删除（文件无法跨端彻底删除）。"
+                    else
+                        "本地删除：仅移除本机记录。\n彻底删除：同步移除服务器与其他设备上的相同内容。")
+                    if (target.type == "image" || target.type == "file") {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val t = target
+                                deleteTarget = null
+                                scope.launch {
+                                    val err = withContext(Dispatchers.IO) {
+                                        MediaSaver.saveToDownloads(context, t)
+                                    }
+                                    snackbar.showSnackbar(err ?: "已保存到下载目录：${if (t.type == "image") "剪贴板_${t.id}.png" else t.content.substringAfterLast('/')}")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text("保存到下载目录")
+                        }
+                    }
+                }
             },
             confirmButton = {
                 Row {
