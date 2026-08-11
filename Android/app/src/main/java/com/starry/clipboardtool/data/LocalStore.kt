@@ -142,6 +142,24 @@ class LocalStore(context: Context) {
         filesDir.listFiles()?.forEach { it.delete() }
     }
 
+    /** 清理 images/files 目录中数据库已无对应条目的孤儿文件（历史 bug 残留），启动时调用一次。 */
+    fun cleanupOrphanFiles() {
+        val referenced = HashSet<String>()
+        db.rawQuery("SELECT content FROM entries WHERE type IN ('image','file')", null).use { c ->
+            while (c.moveToNext()) {
+                val p = c.getString(0)
+                if (p.isNotEmpty()) referenced.add(p)
+            }
+        }
+        for (dir in listOf(imagesDir, filesDir)) {
+            dir.listFiles()?.forEach { f ->
+                if (f.absolutePath !in referenced) {
+                    try { f.delete() } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
     /** 存储占用总字节数（数据库 + 图片 + 文件）。 */
     fun storageUsage(): Long {
         var total = File(db.path).length()

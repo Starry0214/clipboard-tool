@@ -11,6 +11,7 @@ class AppState : Application() {
         super.onCreate()
         instance = this
         store = LocalStore(this)
+        store.cleanupOrphanFiles() // 启动清理历史遗留孤儿图片/同步文件
         prefs = getSharedPreferences("sync_settings", Context.MODE_PRIVATE)
         syncService = SyncService(this)
         // 已登录则自动启动同步（重启后无需重新登录）
