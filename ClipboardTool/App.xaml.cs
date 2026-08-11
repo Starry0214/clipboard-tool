@@ -139,6 +139,36 @@ public partial class App : Application
     /// <summary>防止轮询/手动检查并发：弹窗挂起时再次触发会堆叠弹窗，应用关闭时残留续体崩溃（"应用程序对象正在关闭"）。</summary>
     private static bool _checkingUpdate;
 
+    /// <summary>置顶消息框：隐藏的 Topmost owner 让 MessageBox 继承 WS_EX_TOPMOST，
+    /// 自动检查更新在用户使用其他应用时也能醒目弹出（无 owner 的 MessageBox 会被遮挡）。</summary>
+    private static MessageBoxResult ShowTopmost(string message, string caption,
+        MessageBoxButton button, MessageBoxImage icon)
+    {
+        // 1x1 透明置顶窗口置于屏幕中央，MessageBox 以其为中心弹出且置顶
+        var owner = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Width = 1,
+            Height = 1,
+            Left = SystemParameters.PrimaryScreenWidth / 2 - 1,
+            Top = SystemParameters.PrimaryScreenHeight / 2 - 1,
+            Topmost = true,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+        };
+        owner.Show();
+        try
+        {
+            return MessageBox.Show(owner, message, caption, button, icon);
+        }
+        finally
+        {
+            owner.Close();
+        }
+    }
+
     /// <summary>检查更新：自动模式静默，手动模式带反馈。有更新时引导下载并重启安装。</summary>
     private async Task CheckForUpdateAsync(bool manual)
     {
@@ -188,7 +218,7 @@ public partial class App : Application
         var msg = $"发现新版本 v{latest}（当前 v{Updater.CurrentVersion}）。\n" +
             (string.IsNullOrEmpty(notes) ? "" : $"\n【更新内容】\n{notes}\n") +
             "\n是否下载并安装？";
-        var answer = MessageBox.Show(msg, "发现更新",
+        var answer = ShowTopmost(msg, "发现更新",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (answer != MessageBoxResult.Yes)
             return;
@@ -220,7 +250,7 @@ public partial class App : Application
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            var confirm2 = MessageBox.Show("更新已下载完成，重启后生效（新版本将在下次启动时应用）。是否立即重启？", "更新就绪",
+            var confirm2 = ShowTopmost("更新已下载完成，重启后生效（新版本将在下次启动时应用）。是否立即重启？", "更新就绪",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm2 != MessageBoxResult.Yes)
                 return;
@@ -230,7 +260,7 @@ public partial class App : Application
             return;
         }
 
-        var confirm = MessageBox.Show("更新已下载完成，是否立即重启以完成更新？", "更新就绪",
+        var confirm = ShowTopmost("更新已下载完成，是否立即重启以完成更新？", "更新就绪",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
             return;
