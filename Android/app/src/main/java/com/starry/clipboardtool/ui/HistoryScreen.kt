@@ -19,9 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +57,8 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     var typeFilter by remember { mutableStateOf("") } // "" | text | image | file
+    var sourceFilter by remember { mutableStateOf("") } // "" | local | pc
+    var sourceMenuOpen by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Entry?>(null) }
     var selecting by remember { mutableStateOf(false) } // 多选模式
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
@@ -74,8 +79,8 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
         onDispose { AppState.syncService?.onHistoryChanged = {} }
     }
 
-    val entries = remember(refresh, typeFilter) {
-        AppState.store.query(null, typeFilter.ifEmpty { null }, null)
+    val entries = remember(refresh, typeFilter, sourceFilter) {
+        AppState.store.query(null, typeFilter.ifEmpty { null }, sourceFilter.ifEmpty { null })
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -94,6 +99,24 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                 }) { Text("取消") }
             } else {
                 Text("剪贴板历史", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Box {
+                    val label = when (sourceFilter) {
+                        "local" -> "手机"
+                        "pc" -> "电脑"
+                        else -> "全部来源"
+                    }
+                    TextButton(onClick = { sourceMenuOpen = true }) {
+                        Text(label)
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "切换来源筛选")
+                    }
+                    DropdownMenu(expanded = sourceMenuOpen,
+                        onDismissRequest = { sourceMenuOpen = false }) {
+                        listOf("全部来源" to "", "手机" to "local", "电脑" to "pc").forEach { (l, v) ->
+                            DropdownMenuItem(text = { Text(l) },
+                                onClick = { sourceFilter = v; sourceMenuOpen = false })
+                        }
+                    }
+                }
                 TextButton(onClick = { selecting = true }) { Text("选择") }
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Filled.Settings, contentDescription = "设置")

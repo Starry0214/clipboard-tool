@@ -130,6 +130,14 @@ class LocalStore(context: Context) {
         filesDir.listFiles()?.forEach { it.delete() }
     }
 
+    /** 存储占用总字节数（数据库 + 图片 + 文件）。 */
+    fun storageUsage(): Long {
+        var total = File(db.path).length()
+        total += imagesDir.listFiles()?.sumOf { it.length() } ?: 0
+        total += filesDir.listFiles()?.sumOf { it.length() } ?: 0
+        return total
+    }
+
     /** 图片原图字节（Content 指向的文件）。 */
     fun imageBytes(id: Long): ByteArray? {
         val e = getById(id) ?: return null

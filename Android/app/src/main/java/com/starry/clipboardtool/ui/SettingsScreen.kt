@@ -22,6 +22,13 @@ import com.starry.clipboardtool.AppState
 import com.starry.clipboardtool.UpdateChecker
 import com.starry.clipboardtool.Updater
 
+import java.util.Locale
+
+private fun formatSize(bytes: Long): String {
+    if (bytes < 1024 * 1024) return "${bytes / 1024} KB"
+    return String.format(Locale.CHINA, "%.1f MB", bytes / 1024.0 / 1024.0)
+}
+
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onLogin: () -> Unit = {}, onLogout: () -> Unit) {
     var syncResult by remember { mutableStateOf("") }
@@ -48,6 +55,9 @@ fun SettingsScreen(onBack: () -> Unit, onLogin: () -> Unit = {}, onLogout: () ->
 
         Spacer(Modifier.height(24.dp))
         Text("数据", style = MaterialTheme.typography.titleSmall)
+        val storage = remember { AppState.store.storageUsage() }
+        Text("存储占用：${formatSize(storage)}", style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(8.dp))
         Button(onClick = {
             syncResult = "同步中…"
             AppState.syncService?.syncFromServer { syncResult = it }
