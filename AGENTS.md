@@ -21,7 +21,8 @@
 - **Overlay 弹出位置用物理像素 + `SetWindowPos`**（cursor/WorkingArea 是物理像素，WPF Left/Top 是逻辑单位，直接赋值会在非 100% DPI 下偏移）。
 - **XAML 初始化顺序陷阱**：`IsChecked="True"` 写在 XAML 里会在 `InitializeComponent()` 期间触发事件，此时其他控件（如 ListBox）尚未创建 → NullReferenceException 闪退。初始选中态必须在构造函数 `InitializeComponent()` 之后设置。
 - csproj 移除了 WinForms/Drawing 的全局隐式 using（`Using Remove`），用到 `System.Drawing`/`System.Windows.Forms`/`System.Diagnostics`/`System.Net.Http` 的文件需显式 using。
-- 版本号由两个 `csproj` 的 `<Version>` 控制（当前 1.3.8，**两处必须一致**），自动更新与它比较。`Launcher/embedded/ClipboardToolApp.exe`（被 gitignore）是主程序 exe 副本，解压时以实际 FileVersion 为准（`GetExeVersion` 自愈，见发布节）。
+- 版本号由两个 `csproj` 的 `<Version>` 控制（当前 1.4.3，**两处必须一致**），自动更新与它比较。`Launcher/embedded/ClipboardToolApp.exe`（被 gitignore）是主程序 exe 副本，解压时以实际 FileVersion 为准（`GetExeVersion` 自愈，见发布节）。
+- **更新说明分组规则（用户 2026-08-11）**：Windows 更新说明中联网同步相关条目单独归入【实验性功能：多端同步（可在设置中开启）】标题下，其他条目按正常列表排列。
 
 ## 网络与代理（政务网）
 
