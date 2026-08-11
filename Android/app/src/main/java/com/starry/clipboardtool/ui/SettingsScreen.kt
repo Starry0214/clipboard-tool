@@ -1,5 +1,7 @@
 package com.starry.clipboardtool.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -8,10 +10,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -98,14 +102,22 @@ fun SettingsScreen(onBack: () -> Unit, onLogin: () -> Unit = {}, onLogout: () ->
             Text("当前版本：v${Updater.currentVersion(context)}",
                 style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
-            Button(onClick = {
-                updateResult = "检查中…"
-                updateChangelog = null
-                UpdateChecker.checkManual(context) { latest, changelog ->
-                    updateResult = latest
-                    updateChangelog = changelog
-                }
-            }) { Text("检查更新") }
+            Row {
+                Button(onClick = {
+                    updateResult = "检查中…"
+                    updateChangelog = null
+                    UpdateChecker.checkManual(context) { latest, changelog ->
+                        updateResult = latest
+                        updateChangelog = changelog
+                    }
+                }) { Text("检查更新") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://code.starry0214.one/updates/changelog.html#android"))
+                    context.startActivity(intent)
+                }) { Text("查看历史更新记录") }
+            }
             val isNewVersion = updateResult?.matches(Regex("^\\d+\\.\\d+\\.\\d+$")) == true
             if (updateResult != null && !isNewVersion && updateResult != "检查中…") {
                 Text(updateResult!!, style = MaterialTheme.typography.bodyMedium)
