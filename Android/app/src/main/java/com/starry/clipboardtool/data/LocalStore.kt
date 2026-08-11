@@ -45,6 +45,17 @@ class LocalStore(context: Context) {
             touch(hash)
             return false
         }
+        return insert(e, hash)
+    }
+
+    /** 不存在才插入；已存在直接返回 false（不刷新时间）——同步补拉用，避免已存在条目被反复 touch 移顶。 */
+    fun addIfAbsent(e: Entry): Boolean {
+        val hash = hashOf(e)
+        if (exists(hash)) return false
+        return insert(e, hash)
+    }
+
+    private fun insert(e: Entry, hash: String): Boolean {
         db.execSQL(
             "INSERT INTO entries (type, content, hash, thumb, source, created_at) VALUES (?,?,?,?,?,?)",
             arrayOf(e.type, e.content, hash, e.thumb, e.source, e.createdAt))
@@ -67,7 +78,8 @@ class LocalStore(context: Context) {
     }
 
     private fun hashOf(e: Entry): String {
-        val bytes = if (e.type == "image") {
+        // 图片/文件按内容字节去重（文件路径每次同步生成新 UUID，按路径哈希会重复入库）
+        val bytes = if (e.type == "image" || e.type == "file") {
             val f = File(e.content)
             if (f.exists()) f.readBytes() else e.content.toByteArray()
         } else {

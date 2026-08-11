@@ -139,13 +139,22 @@ class SyncService(private val context: Context) {
         // 同内容只同步一次（持久化）：删除条目后剪贴板内容仍在时，获焦补同步不会把它加回
         val h = when (entry.type) {
             "text" -> ClipboardEvents.contentHash(entry.content)
-            "image" -> AppState.store.hashForSync(entry)
+            "image", "file" -> AppState.store.hashForSync(entry) // 按文件内容字节，与路径无关
             else -> null
         }
         if (h != null && h == lastSyncedHash) {
             android.util.Log.d("ClipSync", "skip: same as last synced")
             return
         }
+        // 剪贴板内容与上次获焦时相同则跳过：弹窗开合/切后台再回来会触发获焦，
+        // 若每次都对残留内容 add→去重 touch，条目时间被反复刷新并顶到列表最前（"列表重排"现象）
+        if (h != null && h == lastClipHash) {
+            // 图片/文件每次 readClip 都会落盘新文件，跳过时清理避免残留
+            if (entry.type == "image" || entry.type == "file") File(entry.content).delete()
+            android.util.Log.d("ClipSync", "skip: clipboard unchanged")
+            return
+        }
+        lastClipHash = h
         // 防回环：App 自己写入剪贴板的内容不上传
         if (entry.type == "text" && ClipboardEvents.suppressHash != null &&
             ClipboardEvents.contentHash(entry.content) == ClipboardEvents.suppressHash
@@ -190,6 +199,9 @@ class SyncService(private val context: Context) {
     private var lastSyncedHash: String?
         get() = AppState.prefs.getString("LastSyncedHash", null)
         set(v) = AppState.prefs.edit().putString("LastSyncedHash", v).apply()
+
+    /** 上次获焦时剪贴板内容的哈希（内存去重：剪贴板未变则跳过，防弹窗/回前台反复 touch 移顶）。 */
+    private var lastClipHash: String? = null
 
     /** 上传手机剪贴板文本到服务器；WS 未连上时延迟重试 3 次，全部失败返回 false（调用方不标记已同步）。 */
     private suspend fun upload(entry: Entry): Boolean {
@@ -236,7 +248,7 @@ class SyncService(private val context: Context) {
                 val text = m.text ?: return
                 val entry = Entry(type = "text", content = text, source = "pc",
                     createdAt = if (m.ts > 0) m.ts / 1000 else System.currentTimeMillis() / 1000)
-                store.add(entry)
+                store.addIfAbsent(entry)
                 if (writeClipboard) ClipboardEvents.writeClip(context, entry, store)
             }
             "clip_image" -> {
@@ -246,7 +258,7 @@ class SyncService(private val context: Context) {
                 val entry = Entry(type = "image", content = path, source = "pc",
                     thumb = store.makeThumb(bytes),
                     createdAt = if (m.ts > 0) m.ts / 1000 else System.currentTimeMillis() / 1000)
-                if (!store.add(entry)) File(path).delete()
+                if (!store.addIfAbsent(entry)) File(path).delete()
                 if (writeClipboard) ClipboardEvents.writeClip(context, entry, store)
             }
             "clip_file" -> {
@@ -255,7 +267,7 @@ class SyncService(private val context: Context) {
                 val path = store.saveRemoteFile(m.name ?: "file.bin", bytes)
                 val entry = Entry(type = "file", content = path, source = "pc",
                     createdAt = if (m.ts > 0) m.ts / 1000 else System.currentTimeMillis() / 1000)
-                if (!store.add(entry)) File(path).delete()
+                if (!store.addIfAbsent(entry)) File(path).delete()
                 if (writeClipboard) ClipboardEvents.writeClip(context, entry, store)
             }
         }
