@@ -298,21 +298,24 @@ public sealed class SyncService : IDisposable
     /// </summary>
     public void DeleteEntry(Entry entry, bool fully)
     {
-        _store.Delete(entry.Id);
-        if (!fully || !_running || _client is null)
-            return;
-        var hash = ComputeSyncHash(entry);
-        if (hash is null)
-            return;
-        _ = Task.Run(async () =>
+        if (fully && _running && _client is not null)
         {
-            for (var attempt = 0; attempt < 3; attempt++)
+            // hash 必须在本地删除前计算：_store.Delete 会同步清理图片/文件，之后读不到
+            var hash = ComputeSyncHash(entry);
+            if (hash is not null)
             {
-                if (await _client.SendDeleteAsync(hash))
-                    return;
-                await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
+                _ = Task.Run(async () =>
+                {
+                    for (var attempt = 0; attempt < 3; attempt++)
+                    {
+                        if (await _client.SendDeleteAsync(hash))
+                            return;
+                        await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
+                    }
+                });
             }
-        });
+        }
+        _store.Delete(entry.Id);
     }
 
     private string? ComputeSyncHash(Entry entry)
@@ -326,7 +329,14 @@ public sealed class SyncService : IDisposable
                 return null;
             return Convert.ToHexString(SHA256.HashData(full.Image)).ToLowerInvariant();
         }
-        return null; // file：本地路径哈希无法跨端匹配
+        if (entry.Type == "file")
+        {
+            // 文件按内容字节哈希（与手机端一致）：服务器 clip_file 消息不带 hash，需本地读文件计算
+            if (!File.Exists(entry.Content))
+                return null;
+            return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(entry.Content))).ToLowerInvariant();
+        }
+        return null;
     }
 
     private async Task ApplyRemote(SyncMessage m, bool isReplay)
