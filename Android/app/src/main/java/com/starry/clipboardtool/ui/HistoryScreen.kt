@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -31,6 +33,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -74,6 +77,7 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var refresh by remember { mutableIntStateOf(0) }
+    var search by remember { mutableStateOf("") }
     var typeFilter by remember { mutableStateOf("") } // "" | text | image | file
     var sourceFilter by remember { mutableStateOf("") } // "" | local | pc
     var sourceMenuOpen by remember { mutableStateOf(false) }
@@ -97,8 +101,8 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
         onDispose { AppState.syncService?.onHistoryChanged = {} }
     }
 
-    val entries = remember(refresh, typeFilter, sourceFilter) {
-        AppState.store.query(null, typeFilter.ifEmpty { null }, sourceFilter.ifEmpty { null })
+    val entries = remember(refresh, search, typeFilter, sourceFilter) {
+        AppState.store.query(search.ifBlank { null }, typeFilter.ifEmpty { null }, sourceFilter.ifEmpty { null })
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
@@ -143,6 +147,20 @@ fun HistoryScreen(onOpenSettings: () -> Unit) {
                     }
                 }
             }
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                placeholder = { Text("搜索历史（文本/文件内容）") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (search.isNotEmpty())
+                        IconButton(onClick = { search = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = "清除搜索")
+                        }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 listOf("全部" to "", "文本" to "text", "图片" to "image", "文件" to "file").forEach { (label, t) ->
                     FilterChip(
