@@ -60,6 +60,15 @@
                     </StackPanel>
                 </Border>
 
+                <TextBlock Text="关于" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,6"/>
+                <Border Style="{StaticResource CardBorder}" Margin="0,0,0,4">
+                    <StackPanel Margin="4">
+                        <TextBlock x:Name="AboutVersionText" FontSize="12" Foreground="#666666" Margin="0,0,0,6"/>
+                        <Button Content="查看历史更新记录" Style="{StaticResource FluentButtonSecondary}"
+                                Padding="10,4" FontSize="12" Click="OnOpenChangelog"/>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="实验性功能" FontWeight="SemiBold" Foreground="#1A1A1A" Margin="0,0,0,6"/>
                 <Border Style="{StaticResource CardBorder}" Margin="0,0,0,4">
                     <StackPanel Margin="4">

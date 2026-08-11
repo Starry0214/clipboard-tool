@@ -31,6 +31,7 @@ public partial class SettingsWindow : Window
         HotkeyBox.PreviewKeyDown += OnHotkeyKeyDown;
         HotkeyBox.GotKeyboardFocus += (_, _) => HotkeyBox.SelectAll();
         LoadDataInfo();
+        AboutVersionText.Text = $"版本 {Updater.CurrentVersion}";
 
         SyncCheck.IsChecked = settings.SyncEnabled; // 初始选中态必须在 InitializeComponent 之后设置（XAML 时序陷阱）
         SyncCheck.Checked += (_, _) => UpdateSyncUi();
@@ -240,6 +241,21 @@ public partial class SettingsWindow : Window
         if (main is null || parts.Count == 0)
             return;
         HotkeyBox.Text = string.Join("+", parts) + "+" + main;
+    }
+
+    /// <summary>打开更新历史网页（服务器单页，Windows 平台 Tab）。</summary>
+    private void OnOpenChangelog(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://code.starry0214.one/updates/changelog.html#windows")
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private void OnOk(object sender, RoutedEventArgs e)
