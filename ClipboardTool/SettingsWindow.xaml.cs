@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
@@ -111,6 +113,42 @@ public partial class SettingsWindow : Window
             UpdateSyncUi();
         else
             SyncStatusText.Text = result;
+    }
+
+    /// <summary>打开 Android 版下载页：域名优先，失败自动回退 IP 直连镜像（与更新器双镜像一致）。</summary>
+    private async void OnDownloadApp(object sender, RoutedEventArgs e)
+    {
+        var btn = (Button)sender;
+        btn.IsEnabled = false;
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+            foreach (var url in new[]
+            {
+                "https://code.starry0214.one/updates/ClipboardToolApp.apk",
+                "http://107.175.228.83:8080/ClipboardToolApp.apk",
+            })
+            {
+                try
+                {
+                    using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                        return;
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+            MessageBox.Show(this, "暂时无法连接下载服务器，请稍后再试。", "下载手机版",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            btn.IsEnabled = true;
+        }
     }
 
     /// <summary>展示数据目录路径与占用大小。</summary>

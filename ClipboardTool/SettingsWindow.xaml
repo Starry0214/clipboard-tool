@@ -65,8 +65,11 @@
                     <StackPanel Margin="4">
                         <CheckBox x:Name="SyncCheck" Content="多端同步（实验性）"
                                   Style="{StaticResource FluentCheckBox}"/>
-                        <TextBlock Text="开启后，本机复制的内容会经自建服务器同步到同一账号下的其他设备（手机），手机复制的内容会出现在本机历史中并标注“手机”来源。"
+                        <TextBlock Text="开启后，本机复制的内容经自建服务器同步到同一账号下的其他设备，手机复制的内容会出现在本机历史并标注「手机」来源。同步为实验性功能，请先点击下方按钮在手机上安装 App，并在手机与电脑上登录同一账号。"
                                    FontSize="12" Foreground="#888888" TextWrapping="Wrap" LineHeight="18" Margin="0,4,0,0"/>
+                        <Button x:Name="DownloadAppBtn" Content="下载手机版 App（Android）"
+                                Style="{StaticResource FluentButtonSecondary}" Padding="10,4" FontSize="12"
+                                Margin="0,8,0,0" Click="OnDownloadApp"/>
                         <StackPanel x:Name="SyncPanel" Margin="0,10,0,0" Visibility="Collapsed">
                             <TextBlock Text="账号" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
                             <TextBox x:Name="SyncUserBox" Style="{StaticResource FluentTextBox}" Margin="0,0,0,8"/>
