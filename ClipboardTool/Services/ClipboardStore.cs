@@ -130,7 +130,7 @@ public sealed class ClipboardStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>裁剪超出上限的最旧非置顶条目，并清理被删图片的文件。降低上限后由调用方显式触发。</summary>
+    /// <summary>裁剪超出上限的最旧非置顶条目，并清理被删条目的图片/同步文件。降低上限后由调用方显式触发。</summary>
     public void Trim()
     {
         var files = new List<string>();
@@ -138,7 +138,7 @@ public sealed class ClipboardStore : IDisposable
         {
             sel.CommandText = """
                 SELECT content FROM entries
-                WHERE pinned = 0 AND type = 'image' AND id NOT IN (
+                WHERE pinned = 0 AND type IN ('image', 'file') AND id NOT IN (
                     SELECT id FROM entries ORDER BY pinned DESC, created_at DESC LIMIT $max
                 )
                 """;
@@ -190,11 +190,15 @@ public sealed class ClipboardStore : IDisposable
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
+            var content = reader.GetString(2);
+            var entryType = reader.GetString(1);
             list.Add(new Entry
             {
                 Id = reader.GetInt64(0),
-                Type = reader.GetString(1),
-                Content = reader.GetString(2),
+                Type = entryType,
+                Content = content,
+                // 列表显示截断：超长文本（如整篇文档）会让 WPF 换行测量全文，布局卡死
+                DisplayContent = entryType == "text" && content.Length > 200 ? content[..200] : content,
                 Thumb = reader.IsDBNull(3) ? null : (byte[])reader[3],
                 Pinned = reader.GetInt64(4) != 0,
                 CreatedAt = reader.GetInt64(5),
@@ -262,7 +266,7 @@ public sealed class ClipboardStore : IDisposable
         string? file = null;
         using (var sel = _conn.CreateCommand())
         {
-            sel.CommandText = "SELECT content FROM entries WHERE id = $id AND type = 'image'";
+            sel.CommandText = "SELECT content FROM entries WHERE id = $id AND type IN ('image', 'file')";
             sel.Parameters.AddWithValue("$id", id);
             var v = sel.ExecuteScalar();
             if (v is string s)
@@ -277,14 +281,14 @@ public sealed class ClipboardStore : IDisposable
         TryDeleteFile(file);
     }
 
-    /// <summary>按内容哈希删除条目（跨端同步删除用），并清理图片文件。
+    /// <summary>按内容哈希删除条目（跨端同步删除用），并清理图片/同步文件。
     /// 用 NOCASE 匹配：本库 hash 为大写 hex（Convert.ToHexString），服务器/手机端为小写。</summary>
     public void DeleteByHash(string hash)
     {
         var files = new List<string>();
         using (var sel = _conn.CreateCommand())
         {
-            sel.CommandText = "SELECT content FROM entries WHERE hash = $hash COLLATE NOCASE AND type = 'image'";
+            sel.CommandText = "SELECT content FROM entries WHERE hash = $hash COLLATE NOCASE AND type IN ('image', 'file')";
             sel.Parameters.AddWithValue("$hash", hash);
             using var reader = sel.ExecuteReader();
             while (reader.Read())
@@ -304,7 +308,7 @@ public sealed class ClipboardStore : IDisposable
         var files = new List<string>();
         using (var sel = _conn.CreateCommand())
         {
-            sel.CommandText = "SELECT content FROM entries WHERE pinned = 0 AND type = 'image'";
+            sel.CommandText = "SELECT content FROM entries WHERE pinned = 0 AND type IN ('image', 'file')";
             using var reader = sel.ExecuteReader();
             while (reader.Read())
                 files.Add(reader.GetString(0));
@@ -327,6 +331,32 @@ public sealed class ClipboardStore : IDisposable
         }
         catch (IOException)
         {
+        }
+    }
+
+    /// <summary>清理 images/files 目录中数据库已无对应条目的孤儿文件
+    /// （旧版本删除同步文件条目时不清理文件、以及历史版本遗留的孤儿）。启动时调用一次。</summary>
+    public void CleanupOrphanFiles()
+    {
+        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT content FROM entries WHERE type IN ('image', 'file')";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                if (reader.GetString(0) is { Length: > 0 } path)
+                    referenced.Add(path);
+        }
+        foreach (var dir in new[] { _imagesDir, Path.Combine(Path.GetDirectoryName(_imagesDir)!, "files") })
+        {
+            if (!Directory.Exists(dir))
+                continue;
+            foreach (var f in Directory.EnumerateFiles(dir))
+                if (!referenced.Contains(f))
+                {
+                    try { File.Delete(f); }
+                    catch (IOException) { }
+                }
         }
     }
 

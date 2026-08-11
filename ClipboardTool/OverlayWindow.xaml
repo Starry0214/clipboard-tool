@@ -258,7 +258,7 @@
                             </StackPanel>
                             <!-- 文本条目：两行截断，全文见 ToolTip / 双击预览 -->
                             <TextBlock Grid.Column="1" x:Name="TextLine"
-                                       Text="{Binding Content}"
+                                       Text="{Binding DisplayContent}"
                                        TextWrapping="Wrap"
                                        LineHeight="19"
                                        MaxHeight="38"

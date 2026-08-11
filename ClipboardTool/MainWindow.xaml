@@ -170,7 +170,7 @@
                                            FontSize="13" VerticalAlignment="Center" Foreground="#1A1A1A"/>
                             </StackPanel>
                             <TextBlock Grid.Column="1" x:Name="TextLine"
-                                       Text="{Binding Content}"
+                                       Text="{Binding DisplayContent}"
                                        TextWrapping="Wrap"
                                        LineHeight="19"
                                        MaxHeight="38"

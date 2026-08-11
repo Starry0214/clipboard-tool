@@ -70,6 +70,7 @@ public partial class App : Application
 
         _settings = Settings.Load(dataDir);
         _store = new ClipboardStore(dataDir) { MaxEntries = _settings.MaxEntries };
+        _store.CleanupOrphanFiles(); // 清理历史遗留的孤儿图片/同步文件（旧版删除条目不删文件）
         _monitor = new ClipboardMonitor(_store);
         _hotkeys = new HotkeyManager();
         _keyboardHook = new KeyboardHook();
