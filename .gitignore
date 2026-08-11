@@ -7,5 +7,6 @@ publish/
 *.db-shm
 *.db-wal
 .tools/
+.playwright-cli/
 
 Launcher/embedded/

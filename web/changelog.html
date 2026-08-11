@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>更新历史 - 剪贴板助手</title>
+<style>
+    :root {
+        --bg: #F3F6FA; --card: #FFFFFF; --text: #1A1A1A; --muted: #666666;
+        --primary: #1565C0; --border: #E3E8EF; --group-bg: #E8F0FE; --tab-inactive: #5F6368;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg: #121417; --card: #1E2226; --text: #E8EAED; --muted: #9AA0A6;
+            --primary: #8AB4F8; --border: #33383E; --group-bg: #1F2A3A; --tab-inactive: #9AA0A6;
+        }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; line-height: 1.6; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    header { text-align: center; margin-bottom: 20px; }
+    h1 { font-size: 22px; margin: 0 0 16px; }
+    .tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .tab { padding: 8px 20px; border: 1px solid var(--border); border-radius: 20px;
+        background: transparent; color: var(--tab-inactive); font-size: 14px;
+        cursor: pointer; font-family: inherit; transition: all .15s; }
+    .tab:hover { border-color: var(--primary); color: var(--primary); }
+    .tab.active { background: var(--primary); color: #FFFFFF; border-color: var(--primary); font-weight: 600; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+        padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+    .ver { font-size: 17px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+    .group { background: var(--group-bg); border-radius: 8px; padding: 6px 10px;
+        font-size: 12.5px; font-weight: 600; margin: 10px 0 6px; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 3px 0; font-size: 14px; }
+    .error, .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+    @media (max-width: 640px) {
+        .wrap { padding: 16px 12px 40px; }
+        h1 { font-size: 19px; }
+        .ver { font-size: 15px; }
+        li { font-size: 13px; }
+    }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <h1>剪贴板助手 · 更新历史</h1>
+        <div class="tabs">
+            <button class="tab" data-platform="windows" id="tab-windows">🖥 Windows 电脑</button>
+            <button class="tab" data-platform="android" id="tab-android">📱 Android 手机</button>
+        </div>
+    </header>
+    <main id="content"></main>
+</div>
+<script>
+"use strict";
+const FILES = { windows: "changelog.txt", android: "changelog-android.txt" };
+
+function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// 解析 changelog 文本：vX.Y.Z 分块，"- " 条目，【...】分组标题，空行忽略
+function parseChangelog(text) {
+    const blocks = [];
+    let current = null;
+    for (const raw of text.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line) continue;
+        const m = line.match(/^v(\d+\.\d+\.\d+)$/);
+        if (m) { current = { version: m[1], groups: [] }; blocks.push(current); continue; }
+        if (!current) continue;
+        const g = current.groups;
+        if (line.startsWith("【")) {
+            g.push({ title: line, items: [] });
+        } else {
+            const item = line.startsWith("- ") ? line.slice(2) : line;
+            if (!g.length || g[g.length - 1].title !== null) g.push({ title: null, items: [] });
+            g[g.length - 1].items.push(item);
+        }
+    }
+    return blocks;
+}
+
+function renderBlocks(blocks) {
+    if (!blocks.length) return '<div class="error">暂无更新记录</div>';
+    return blocks.map(b => {
+        const groupsHtml = b.groups.map(g => {
+            const title = g.title ? `<div class="group">${escapeHtml(g.title)}</div>` : "";
+            const items = `<ul>${g.items.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
+            return title + items;
+        }).join("");
+        return `<div class="card"><div class="ver">v${b.version}</div>${groupsHtml}</div>`;
+    }).join("");
+}
+
+async function load(platform) {
+    const content = document.getElementById("content");
+    content.innerHTML = '<div class="loading">加载中…</div>';
+    try {
+        const resp = await fetch(FILES[platform], { cache: "no-store" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        content.innerHTML = renderBlocks(parseChangelog(await resp.text()));
+    } catch (e) {
+        content.innerHTML = '<div class="error">无法加载更新记录，请检查网络后重试。</div>';
+    }
+}
+
+function switchPlatform(p) {
+    document.querySelectorAll(".tab").forEach(t =>
+        t.classList.toggle("active", t.dataset.platform === p));
+    load(p);
+}
+
+document.querySelectorAll(".tab").forEach(t =>
+    t.addEventListener("click", () => {
+        switchPlatform(t.dataset.platform);
+        location.hash = t.dataset.platform;
+    }));
+
+function platformFromHash() {
+    const h = (location.hash || "").replace("#", "");
+    return FILES[h] ? h : "windows";
+}
+
+window.addEventListener("hashchange", () => switchPlatform(platformFromHash()));
+switchPlatform(platformFromHash());
+</script>
+</body>
+</html>
