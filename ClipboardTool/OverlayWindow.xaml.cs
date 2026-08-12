@@ -60,9 +60,15 @@ public partial class OverlayWindow : Window
         // 失焦时延迟确认再关闭（避免与热键重按竞争）
         Deactivated += (_, _) =>
         {
+            // 右键非粘贴操作（置顶/删除/预览/另存为）后列表保持打开：
+            // 期间失焦（如打开预览窗口）不触发自动关闭，列表重新激活时清除标志
+            if (_keepOpenAfterMenu)
+                return;
             _closeTimer.Stop();
             _closeTimer.Start();
         };
+        // 列表重新激活 → 非粘贴操作的"保持打开"状态结束，恢复失焦自动关闭
+        Activated += (_, _) => _keepOpenAfterMenu = false;
         // 点击列表外部区域 → 等效 Esc 关闭
         _mouseCatcher.OutsideClick += RequestHide;
     }
@@ -332,8 +338,16 @@ public partial class OverlayWindow : Window
             pin.Header = entry.Pinned ? "取消置顶" : "置顶";
     }
 
+    private bool _keepOpenAfterMenu; // 右键非粘贴操作后保持列表打开（粘贴已主动关闭）
+
     private void OnContextMenuClosed(object sender, RoutedEventArgs e)
     {
+        if (_keepOpenAfterMenu)
+        {
+            // 置顶/删除/预览/另存为 不关闭列表：菜单关闭后不再启动失焦定时器，
+            // 保持打开状态由 Deactivated 处理器尊重；列表重新激活（Activated）时清除
+            return;
+        }
         // 菜单关闭后恢复失焦关闭逻辑
         if (IsVisible && !IsActive)
         {
@@ -346,6 +360,7 @@ public partial class OverlayWindow : Window
     {
         if (ContextEntry(sender) is not Entry entry)
             return;
+        _keepOpenAfterMenu = true; // 非粘贴操作不关闭列表
         _store.SetPinned(entry.Id, !entry.Pinned);
         Reload();
     }
@@ -354,6 +369,7 @@ public partial class OverlayWindow : Window
     {
         if (ContextEntry(sender) is not Entry entry)
             return;
+        _keepOpenAfterMenu = true; // 非粘贴操作不关闭列表
         var dlg = new DeleteDialog(entry) { Owner = this };
         if (dlg.ShowDialog() != true)
             return;
@@ -365,6 +381,7 @@ public partial class OverlayWindow : Window
     {
         if (ContextEntry(sender) is not Entry entry)
             return;
+        _keepOpenAfterMenu = true; // 非粘贴操作不关闭列表
         // 预览后把该条目移到列表顶部（非置顶），便于知道刚才预览的是哪一条
         _store.TouchById(entry.Id);
         switch (entry.Type)
@@ -407,6 +424,7 @@ public partial class OverlayWindow : Window
     {
         if (ContextEntry(sender) is not Entry entry)
             return;
+        _keepOpenAfterMenu = true; // 非粘贴操作不关闭列表
         var full = _store.GetById(entry.Id) ?? entry;
         var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         string fileName, filter;
