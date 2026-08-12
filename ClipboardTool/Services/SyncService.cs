@@ -20,6 +20,9 @@ public sealed class SyncService : IDisposable
     private SyncClient? _client;
     private CancellationTokenSource? _cts;
     private volatile bool _running;
+    /// <summary>WS 断开期间 HTTP 增量轮询兜底（境外中继对长连接不稳，轮询保证消息不丢）。</summary>
+    private System.Threading.Timer? _pollTimer;
+    private const int PollIntervalMs = 30_000;
 
     public SyncService(ClipboardStore store, ClipboardMonitor monitor, Settings settings, string dataDir)
     {
@@ -116,6 +119,11 @@ public sealed class SyncService : IDisposable
         _client.MessageReceived += OnRemoteMessage;
         _client.Reconnected += OnReconnected;
         _monitor.EntryCaptured += OnLocalCaptured;
+        // WS 断开期间 HTTP 增量轮询兜底：境外 TCP 中继对长连接不稳定，WS 可能长时间连不上，
+        // 轮询保证消息不因 WS 断线而丢失（WS 恢复后实时推送接管，轮询自动跳过）
+        _pollTimer?.Dispose();
+        _pollTimer = new System.Threading.Timer(_ => PollWhenDisconnected(),
+            null, PollIntervalMs, PollIntervalMs);
         SetStatus("连接中…");
         try
         {
@@ -148,6 +156,8 @@ public sealed class SyncService : IDisposable
     {
         _running = false;
         _monitor.EntryCaptured -= OnLocalCaptured;
+        _pollTimer?.Dispose();
+        _pollTimer = null;
         _cts?.Cancel();
         if (_client is not null)
         {
@@ -158,6 +168,14 @@ public sealed class SyncService : IDisposable
         _client = null;
         SetStatus("已停用");
         await Task.CompletedTask;
+    }
+
+    /// <summary>WS 未连接时（断线/连不上）定期 HTTP 增量拉取兜底，保证消息不因 WS 不稳定而丢失。</summary>
+    private void PollWhenDisconnected()
+    {
+        if (!_running || _client is null || _client.Connected)
+            return;
+        OnReconnected(); // 复用增量补拉逻辑（幂等，靠 seq 去重）
     }
 
     private void OnLocalCaptured(Entry entry)
