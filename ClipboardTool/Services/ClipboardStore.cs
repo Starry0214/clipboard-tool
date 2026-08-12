@@ -9,9 +9,11 @@ public sealed class ClipboardStore : IDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly string _imagesDir;
+    private readonly string _dataDir;
 
     public ClipboardStore(string dataDir)
     {
+        _dataDir = Path.GetFullPath(dataDir);
         Directory.CreateDirectory(dataDir);
         _imagesDir = Path.Combine(dataDir, "images");
         Directory.CreateDirectory(_imagesDir);
@@ -398,12 +400,17 @@ public sealed class ClipboardStore : IDisposable
             TryDeleteFile(f);
     }
 
-    private static void TryDeleteFile(string? path)
+    private void TryDeleteFile(string? path)
     {
         try
         {
-            if (!string.IsNullOrEmpty(path) && File.Exists(path))
-                File.Delete(path);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                return;
+            var full = Path.GetFullPath(path);
+            // 只删数据目录内的副本（图片/同步文件）；本机复制文件的源路径只删记录、绝不触碰
+            if (!full.StartsWith(_dataDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return;
+            File.Delete(full);
         }
         catch (IOException)
         {
