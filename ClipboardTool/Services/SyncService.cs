@@ -375,7 +375,7 @@ public sealed class SyncService : IDisposable
         var safeName = SanitizeName(m.Name ?? (type == "image" ? "image.png" : "file.bin"));
         var localPath = type == "image"
             ? _store.SaveImageFile(bytes)
-            : Path.Combine(_filesDir, $"{Guid.NewGuid():N}_{safeName}");
+            : Path.Combine(_filesDir, UniqueFileName(_filesDir, safeName));
         if (type == "file")
             File.WriteAllBytes(localPath, bytes);
         var entry = new Entry
@@ -397,6 +397,20 @@ public sealed class SyncService : IDisposable
     {
         var invalid = Path.GetInvalidFileNameChars();
         return new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+    }
+
+    /// 优先使用原始文件名；仅当目录中已存在同名文件时才追加 (1)/(2) 后缀，避免默认带哈希前缀。
+    private static string UniqueFileName(string dir, string name)
+    {
+        var path = Path.Combine(dir, name);
+        if (!File.Exists(path)) return path;
+        var stem = Path.GetFileNameWithoutExtension(name);
+        var ext = Path.GetExtension(name);
+        for (var i = 1; ; i++)
+        {
+            var candidate = Path.Combine(dir, $"{stem} ({i}){ext}");
+            if (!File.Exists(candidate)) return candidate;
+        }
     }
 
     private static byte[]? MakeThumbBytes(byte[] png)
