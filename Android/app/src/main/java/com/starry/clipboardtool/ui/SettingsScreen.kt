@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -88,12 +89,26 @@ fun SettingsScreen(onBack: () -> Unit, onLogin: () -> Unit = {}, onLogout: () ->
 
         SectionCard("数据") {
             val storage = remember { AppState.store.storageUsage() }
+            var syncing by remember { mutableStateOf(false) }
+            var syncProgress by remember { mutableStateOf(0f) }
             Text("存储占用：${formatSize(storage)}", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
             Button(onClick = {
-                syncResult = "同步中…"
-                AppState.syncService?.syncFromServer { syncResult = it }
-            }, enabled = loggedIn) { Text("同步服务器到本地") }
+                syncing = true
+                syncProgress = 0f
+                syncResult = ""
+                AppState.syncService?.syncFromServer(
+                    onDone = { result ->
+                        syncing = false
+                        syncResult = result
+                    },
+                    onProgress = { p -> syncProgress = p })
+            }, enabled = loggedIn && !syncing) { Text(if (syncing) "同步中…" else "同步服务器到本地") }
+            if (syncing) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(progress = syncProgress,
+                    modifier = Modifier.fillMaxWidth())
+            }
             if (syncResult.isNotEmpty()) {
                 Text(syncResult, style = MaterialTheme.typography.bodyMedium)
             }

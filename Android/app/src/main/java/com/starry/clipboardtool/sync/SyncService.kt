@@ -103,8 +103,9 @@ class SyncService(private val context: Context) {
         client = null
     }
 
-    /** 手动同步服务器到本地：全量拉取最近 7 天入库（不按 seq 过滤——本地删除后可从服务器找回；store 哈希去重兜底）。 */
-    fun syncFromServer(onDone: (String) -> Unit) {
+    /** 手动同步服务器到本地：全量拉取最近 7 天入库（不按 seq 过滤——本地删除后可从服务器找回；store 哈希去重兜底）。
+     * onProgress(0f~1f) 按已处理条数/总数推进（main 线程回调）。 */
+    fun syncFromServer(onDone: (String) -> Unit, onProgress: (Float) -> Unit = {}) {
         val c = client
         if (c == null) {
             onDone("未连接，无法同步")
@@ -118,14 +119,17 @@ class SyncService(private val context: Context) {
                 main.post { onDone("同步失败：无法连接服务器") }
                 return@launch
             }
-            history.forEach { m ->
+            val total = history.size.coerceAtLeast(1)
+            history.forEachIndexed { i, m ->
                 applyRemote(m, writeClipboard = false)
                 if (m.seq > maxSeq) maxSeq = m.seq
                 n++
+                main.post { onProgress((i + 1).toFloat() / total) }
             }
             AppState.lastSeq = maxSeq
             main.post {
                 onHistoryChanged()
+                onProgress(1f)
                 onDone("同步完成（处理 $n 条）")
             }
         }
