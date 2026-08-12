@@ -27,17 +27,17 @@
             </DockPanel>
         </Border>
 
-        <!-- 图片区域（深色背景 + 滚动 + 缩放） -->
+        <!-- 图片区域（白色背景：透明 PNG 显示为白色而非黑色 + 滚动 + 缩放） -->
         <Border Grid.Row="1" Background="#1A1A1A" ClipToBounds="True">
             <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <Grid>
+                <Grid Background="White">
                     <Image x:Name="PreviewImage"
                            Stretch="Uniform"
                            SnapsToDevicePixels="True"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
                     <!-- 空状态提示 -->
                     <TextBlock x:Name="EmptyHint" Text="无图片内容"
-                               Foreground="#666666" FontSize="14"
+                               Foreground="#999999" FontSize="14"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Visibility="Collapsed"/>
                 </Grid>

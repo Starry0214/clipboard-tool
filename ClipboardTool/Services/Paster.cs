@@ -183,7 +183,8 @@ public static class Paster
         return BitmapFromSource(decoder.Frames[0]);
     }
 
-    /// <summary>BitmapSource → Bitmap：不透明格式（JPEG 的 Bgr24）24bpp 直通跳过格式转换，透明格式（PNG）转 Bgra32；
+    /// <summary>BitmapSource → Bitmap：不透明格式（JPEG 的 Bgr24）24bpp 直通跳过格式转换，透明格式（PNG）合成白底后转 Bgra32
+    /// （透明 PNG 粘贴到目标应用显示为黑底/透明，合成白底后为白色）；
     /// 直接拷贝像素，避免 PNG 重编码与多余格式转换（大图这两步是粘贴卡顿主因）。
     /// 兼容所有 WPF 像素格式（Bgr24/Bgra32/Pbgra32/灰度/索引色等），转换异常时按源格式兜底拷贝。</summary>
     private static Bitmap BitmapFromSource(BitmapSource src)
@@ -192,7 +193,10 @@ public static class Paster
         {
             if (src.Format == PixelFormats.Bgr24)
                 return CopyToBitmap(src, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-            var src32 = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            var opaque = src.Format == PixelFormats.Bgra32 || src.Format == PixelFormats.Pbgra32
+                ? CompositeOnWhite(src)   // 透明 PNG：白底合成
+                : src;
+            var src32 = new FormatConvertedBitmap(opaque, PixelFormats.Bgra32, null, 0);
             src32.Freeze();
             return CopyToBitmap(src32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         }
@@ -204,6 +208,23 @@ public static class Paster
                 : System.Drawing.Imaging.PixelFormat.Format32bppArgb;
             return CopyToBitmap(src, fmt);
         }
+    }
+
+    /// <summary>带 alpha 的 BitmapSource 合成到白色背景：透明区域变白（保留 RGB 内容），用于粘贴/预览避免黑底。</summary>
+    private static BitmapSource CompositeOnWhite(BitmapSource src)
+    {
+        var w = src.PixelWidth;
+        var h = src.PixelHeight;
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(System.Windows.Media.Brushes.White, null, new System.Windows.Rect(0, 0, w, h));
+            dc.DrawImage(src, new System.Windows.Rect(0, 0, w, h));
+        }
+        var bmp = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(visual);
+        bmp.Freeze();
+        return bmp;
     }
 
     private static Bitmap CopyToBitmap(BitmapSource s, System.Drawing.Imaging.PixelFormat fmt)
