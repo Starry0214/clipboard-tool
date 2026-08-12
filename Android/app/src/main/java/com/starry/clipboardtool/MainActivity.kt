@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,10 +47,14 @@ class MainActivity : ComponentActivity() {
                         onSkip = { skippedLogin = true; screen = "main" })
                 } else when (screen) {
                     "main" -> HistoryScreen(onOpenSettings = { screen = "settings" })
-                    "settings" -> SettingsScreen(
-                        onBack = { screen = "main" },
-                        onLogin = { screen = "login" },
-                        onLogout = { loggedIn = false; skippedLogin = false; screen = "main" })
+                    "settings" -> {
+                        // 系统返回/返回手势 → 回主界面，而非退出应用
+                        BackHandler { screen = "main" }
+                        SettingsScreen(
+                            onBack = { screen = "main" },
+                            onLogin = { screen = "login" },
+                            onLogout = { loggedIn = false; skippedLogin = false; screen = "main" })
+                    }
                     else -> LoginScreen(onLoggedIn = { loggedIn = true; screen = "main" },
                         onSkip = { skippedLogin = true; screen = "main" })
                 }
