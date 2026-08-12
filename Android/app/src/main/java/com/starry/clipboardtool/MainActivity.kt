@@ -9,6 +9,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,18 +51,36 @@ class MainActivity : ComponentActivity() {
                 if (!loggedIn && !skippedLogin && screen != "login") {
                     LoginScreen(onLoggedIn = { loggedIn = true; screen = "main" },
                         onSkip = { skippedLogin = true; screen = "main" })
-                } else when (screen) {
-                    "main" -> HistoryScreen(onOpenSettings = { screen = "settings" })
-                    "settings" -> {
-                        // 系统返回/返回手势 → 回主界面，而非退出应用
-                        BackHandler { screen = "main" }
-                        SettingsScreen(
-                            onBack = { screen = "main" },
-                            onLogin = { screen = "login" },
-                            onLogout = { loggedIn = false; skippedLogin = false; screen = "main" })
+                } else {
+                    // 页面切换动画：前进（进设置/登录）新页右滑入、旧页左滑出；返回则反向
+                    val order = mapOf("login" to 0, "main" to 1, "settings" to 2)
+                    AnimatedContent(
+                        targetState = screen,
+                        transitionSpec = {
+                            val forward = (order[targetState] ?: 0) > (order[initialState] ?: 0)
+                            if (forward)
+                                (slideInHorizontally { it } + fadeIn()) togetherWith
+                                    (slideOutHorizontally { -it } + fadeOut())
+                            else
+                                (slideInHorizontally { -it } + fadeIn()) togetherWith
+                                    (slideOutHorizontally { it } + fadeOut())
+                        },
+                        label = "screenTransition"
+                    ) { target ->
+                        when (target) {
+                            "main" -> HistoryScreen(onOpenSettings = { screen = "settings" })
+                            "settings" -> {
+                                // 系统返回/返回手势 → 回主界面，而非退出应用
+                                BackHandler { screen = "main" }
+                                SettingsScreen(
+                                    onBack = { screen = "main" },
+                                    onLogin = { screen = "login" },
+                                    onLogout = { loggedIn = false; skippedLogin = false; screen = "main" })
+                            }
+                            else -> LoginScreen(onLoggedIn = { loggedIn = true; screen = "main" },
+                                onSkip = { skippedLogin = true; screen = "main" })
+                        }
                     }
-                    else -> LoginScreen(onLoggedIn = { loggedIn = true; screen = "main" },
-                        onSkip = { skippedLogin = true; screen = "main" })
                 }
             }
         }
