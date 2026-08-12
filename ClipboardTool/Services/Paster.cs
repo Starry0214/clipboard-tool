@@ -28,12 +28,12 @@ public static class Paster
             try
             {
                 NativeMethods.SetForegroundWindow(target);
-                Thread.Sleep(30);
+                Thread.Sleep(20);
                 if (plainTextOnly)
                     Retry(() => SetClipboardText(entry.Content)); // 强制纯文本：文本=内容、文件=路径、图片=尺寸
                 else
                     WriteClipboardWin32(entry);
-                Thread.Sleep(60);
+                Thread.Sleep(25);
                 SendCtrlV();
             }
             catch (Exception ex)
@@ -183,18 +183,38 @@ public static class Paster
         return BitmapFromSource(decoder.Frames[0]);
     }
 
-    /// <summary>BitmapSource → 32bppArgb Bitmap：直接拷贝像素，跳过 PNG 重编码（大图 PNG 编码是粘贴卡顿主因）。</summary>
+    /// <summary>BitmapSource → Bitmap：不透明格式（JPEG 的 Bgr24）24bpp 直通跳过格式转换，透明格式（PNG）转 Bgra32；
+    /// 直接拷贝像素，避免 PNG 重编码与多余格式转换（大图这两步是粘贴卡顿主因）。
+    /// 兼容所有 WPF 像素格式（Bgr24/Bgra32/Pbgra32/灰度/索引色等），转换异常时按源格式兜底拷贝。</summary>
     private static Bitmap BitmapFromSource(BitmapSource src)
     {
-        var src32 = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
-        src32.Freeze();
-        var w = src32.PixelWidth;
-        var h = src32.PixelHeight;
-        var bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         try
         {
-            src32.CopyPixels(new Int32Rect(0, 0, w, h), data.Scan0, data.Stride * h, data.Stride);
+            if (src.Format == PixelFormats.Bgr24)
+                return CopyToBitmap(src, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            var src32 = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            src32.Freeze();
+            return CopyToBitmap(src32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        }
+        catch (Exception)
+        {
+            // 极端格式/元数据导致转换失败：按源格式直接拷贝，避免粘贴整体失败
+            var fmt = src.Format == PixelFormats.Bgr24
+                ? System.Drawing.Imaging.PixelFormat.Format24bppRgb
+                : System.Drawing.Imaging.PixelFormat.Format32bppArgb;
+            return CopyToBitmap(src, fmt);
+        }
+    }
+
+    private static Bitmap CopyToBitmap(BitmapSource s, System.Drawing.Imaging.PixelFormat fmt)
+    {
+        var w = s.PixelWidth;
+        var h = s.PixelHeight;
+        var bmp = new Bitmap(w, h, fmt);
+        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, fmt);
+        try
+        {
+            s.CopyPixels(new Int32Rect(0, 0, w, h), data.Scan0, data.Stride * h, data.Stride);
         }
         finally
         {
@@ -203,12 +223,15 @@ public static class Paster
         return bmp;
     }
 
-    /// <summary>Bitmap → 32bpp DIB（BITMAPINFOHEADER + 自底向上像素数据）。返回的句柄由调用方管理。</summary>
+    /// <summary>Bitmap → DIB（BITMAPINFOHEADER + 自底向上像素数据），biBitCount 跟随位图格式（24/32）。返回的句柄由调用方管理。</summary>
     private static IntPtr ConvertToDib(Bitmap bmp)
     {
         const int headerSize = 40; // BITMAPINFOHEADER
         var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
-        var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var bpp = bmp.PixelFormat == System.Drawing.Imaging.PixelFormat.Format24bppRgb ? 24 : 32;
+        var lockFmt = bpp == 24 ? System.Drawing.Imaging.PixelFormat.Format24bppRgb
+            : System.Drawing.Imaging.PixelFormat.Format32bppArgb;
+        var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, lockFmt);
         try
         {
             var stride = Math.Abs(bmpData.Stride);
@@ -219,7 +242,7 @@ public static class Paster
             Marshal.WriteInt32(h, 4, bmp.Width);       // biWidth
             Marshal.WriteInt32(h, 8, bmp.Height);      // biHeight（正=自底向上）
             Marshal.WriteInt16(h, 12, 1);              // biPlanes
-            Marshal.WriteInt16(h, 14, 32);             // biBitCount
+            Marshal.WriteInt16(h, 14, (short)bpp);       // biBitCount
             Marshal.WriteInt32(h, 16, 0);              // biCompression = BI_RGB
             Marshal.WriteInt32(h, 20, pixelBytes);     // biSizeImage
 
