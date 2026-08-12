@@ -17,8 +17,7 @@ object MediaSaver {
         val name = if (entry.type == "image")
             "剪贴板_${entry.id}.png"
         else
-            // 去掉同步下载时加的 UUID 前缀，保留原始文件名
-            src.name.substringAfter("_", src.name)
+            src.name
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {

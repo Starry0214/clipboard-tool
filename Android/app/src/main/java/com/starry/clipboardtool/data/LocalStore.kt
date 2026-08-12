@@ -33,9 +33,25 @@ class LocalStore(context: Context) {
     fun saveImageFile(bytes: ByteArray): String =
         File(imagesDir, "${UUID.randomUUID()}.png").also { it.writeBytes(bytes) }.absolutePath
 
+    /** 保存远端/分享文件：优先原始文件名，仅重名时追加 (1)/(2) 后缀（不再默认带 UUID 前缀）。 */
     fun saveRemoteFile(name: String, bytes: ByteArray): String {
         val safe = name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        return File(filesDir, "${UUID.randomUUID()}_$safe").also { it.writeBytes(bytes) }.absolutePath
+        var f = File(filesDir, safe)
+        if (!f.exists()) {
+            f.writeBytes(bytes)
+            return f.absolutePath
+        }
+        val stem = safe.substringBeforeLast('.', safe)
+        val ext = if ('.' in safe) safe.substringAfterLast('.') else ""
+        var i = 1
+        while (true) {
+            f = File(filesDir, if (ext.isEmpty()) "$stem ($i)" else "$stem ($i).$ext")
+            if (!f.exists()) {
+                f.writeBytes(bytes)
+                return f.absolutePath
+            }
+            i++
+        }
     }
 
     /** 新增条目，按哈希去重（图片按原图字节、其余按 type\0content）；重复则刷新时间并返回 false。 */

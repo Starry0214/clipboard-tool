@@ -5,13 +5,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.BufferedSink
 import org.json.JSONObject
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -28,6 +31,8 @@ class SyncClient(private val baseUrl: String, private val token: String) {
     /** WS 是否完成握手（onOpen 才为 true）；未握手时 send 会假成功丢消息，必须以此为准。 */
     @Volatile
     private var connected = false
+
+    fun isConnected(): Boolean = connected
 
     private fun buildHttpClient(): OkHttpClient {
         val trustAll = object : X509TrustManager {
@@ -77,10 +82,25 @@ class SyncClient(private val baseUrl: String, private val token: String) {
     suspend fun login(username: String, password: String, deviceName: String): AuthResult? =
         auth("/api/auth/login", username, password, deviceName)
 
-    suspend fun uploadMedia(bytes: ByteArray): Long? = runCatching {
+    /** 上传媒体字节；onProgress(uploaded, total) 在写请求体时实时回调（64KB 块）。 */
+    suspend fun uploadMedia(bytes: ByteArray, onProgress: (Long, Long) -> Unit = { _, _ -> }): Long? = runCatching {
         http.newCall(Request.Builder()
             .url(baseUrl.trimEnd('/') + "/api/media")
-            .post(bytes.toRequestBody("application/octet-stream".toMediaType()))
+            .post(object : RequestBody() {
+                override fun contentType(): MediaType? = "application/octet-stream".toMediaType()
+                override fun contentLength(): Long = bytes.size.toLong()
+                override fun writeTo(sink: BufferedSink) {
+                    var uploaded = 0L
+                    val buf = ByteArray(64 * 1024)
+                    while (uploaded < bytes.size) {
+                        val n = minOf(buf.size.toLong(), bytes.size - uploaded).toInt()
+                        System.arraycopy(bytes, uploaded.toInt(), buf, 0, n)
+                        sink.write(buf, 0, n)
+                        uploaded += n
+                        onProgress(uploaded, bytes.size.toLong())
+                    }
+                }
+            })
             .header("Authorization", "Bearer $token")
             .build()).execute().use { resp ->
             if (resp.code != 201) null

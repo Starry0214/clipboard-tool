@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 class SyncService(private val context: Context) {
     val mirrors = listOf("https://code.starry0214.one/sync", "https://107.175.228.83:8081")
@@ -72,14 +73,8 @@ class SyncService(private val context: Context) {
         val c = SyncClient(baseUrl(), AppState.token)
         client = c
         scope.launch {
-            // 回放：只入库不写剪贴板（seq 去重）；delete 为彻底删除，任何同步都应用
-            val history = c.fetchHistory(0)
-            history?.forEach { m ->
-                if (m.seq <= AppState.lastSeq) return@forEach
-                applyRemote(m, writeClipboard = false)
-                if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
-            }
-            main.post { onHistoryChanged() }
+            // 先建 WS 连接再回放历史：connect() 内部自行协程，立即返回；
+            // 若先 fetchHistory（HTTP 在慢网络可能 10s+）会阻塞 connect 调用，导致冷启动分享的 waitWsReady 等不到握手
             c.connect(
                 onMessage = { m ->
                     if (!running) return@connect
@@ -91,6 +86,14 @@ class SyncService(private val context: Context) {
                     }
                 },
                 onStatus = { s -> main.post { onStatus(s) } })
+            // 回放：只入库不写剪贴板（seq 去重）；delete 为彻底删除，任何同步都应用
+            val history = c.fetchHistory(0)
+            history?.forEach { m ->
+                if (m.seq <= AppState.lastSeq) return@forEach
+                applyRemote(m, writeClipboard = false)
+                if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
+            }
+            main.post { onHistoryChanged() }
         }
     }
 
@@ -177,6 +180,79 @@ class SyncService(private val context: Context) {
             lastSyncedHash = h
         }
         main.post { onHistoryChanged() }
+    }
+
+    /** 分享接收：入库去重，返回实际新增的条目；重复的图片/文件清理新落盘文件避免孤儿。 */
+    fun addShareEntries(entries: List<Entry>): List<Entry> {
+        val added = entries.filter { entry ->
+            if (AppState.store.add(entry)) true
+            else {
+                if (entry.type == "image" || entry.type == "file") File(entry.content).delete()
+                false
+            }
+        }
+        if (added.isNotEmpty()) main.post { onHistoryChanged() }
+        return added
+    }
+
+    /** 等待 WS 握手（≤10s）后逐个上传条目；分享后台 Service 调用。
+     * onProgress 可能来自 OkHttp 写请求体线程，调用方需自行切主线程。 */
+    suspend fun uploadEntries(entries: List<Entry>, onProgress: (Float) -> Unit = {}): Boolean {
+        if (!waitWsReady(10_000)) return false
+        var okAll = true
+        val totalBytes = entries.sumOf { entryBytes(it) }.coerceAtLeast(1)
+        val doneBytes = AtomicLong(0)
+        for (entry in entries) {
+            val ok = if (entry.type == "text") upload(entry)
+            else uploadMediaEntry(entry) { up, _ ->
+                val d = doneBytes.get() + up
+                onProgress((d.toFloat() / totalBytes).coerceIn(0f, 1f))
+            }
+            if (ok) doneBytes.addAndGet(entryBytes(entry)) else okAll = false
+            onProgress((doneBytes.get().toFloat() / totalBytes).coerceIn(0f, 1f))
+        }
+        return okAll
+    }
+
+    /** 条目上传字节量（文本按内容字节，图片/文件按文件大小）。 */
+    private fun entryBytes(entry: Entry): Long =
+        if (entry.type == "text") entry.content.toByteArray().size.toLong()
+        else File(entry.content).takeIf { it.exists() }?.length() ?: 0L
+
+    /** 阻塞等待 WS 完成握手（最多 timeoutMs 毫秒），期间每 100ms 轮询一次。 */
+    private fun waitWsReady(timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val c = client
+            if (c != null && c.isConnected()) return true
+            Thread.sleep(100)
+        }
+        return false
+    }
+
+    /** 上传图片/文件条目：字节存服务器媒体库 → WS 广播 clip_image/clip_file（Windows 端下载媒体入库粘贴）。
+     * onProgress(uploaded,total) 转发自 OkHttp 写请求体回调（用于分享进度条实时显示）。 */
+    private suspend fun uploadMediaEntry(entry: Entry,
+                                         onProgress: (Long, Long) -> Unit = { _, _ -> }): Boolean {
+        val c = client ?: return false
+        if (entry.type != "image" && entry.type != "file") return false
+        val f = File(entry.content)
+        if (!f.exists()) return false
+        val bytes = f.readBytes()
+        repeat(3) { attempt ->
+            val mediaId = c.uploadMedia(bytes, onProgress)
+            if (mediaId == null) {
+                android.util.Log.w("ClipSync", "uploadMedia attempt ${attempt + 1} failed")
+                delay(3000)
+                return@repeat
+            }
+            val name = if (entry.type == "image") "剪贴板_${entry.id}.png"
+            else f.name
+            if (c.sendClipMedia(if (entry.type == "image") "clip_image" else "clip_file",
+                    mediaId, name, bytes.size.toLong())) return true
+            delay(3000)
+        }
+        return false
     }
 
     /** App 获焦（打开/回前台）：上传手机当前剪贴板 + 增量拉取服务器新消息（补 WS 离线期间错过的电脑端内容）。
