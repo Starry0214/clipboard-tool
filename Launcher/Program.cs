@@ -35,8 +35,12 @@ internal static class Program
     private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
 
     private const uint MB_OK = 0x00000000;
+    private const uint MB_YESNO = 0x00000004;
+    private const uint MB_ICONQUESTION = 0x00000020;
     private const uint MB_ICONWARNING = 0x00000030;
     private const uint MB_ICONERROR = 0x00000010;
+    private const uint MB_DEFBUTTON1 = 0x00000100;
+    private const int IDYES = 6;
 
     /// <summary>引导器自身版本（与 csproj &lt;Version&gt; 及内嵌主程序版本同步）。</summary>
     private static readonly Version SelfVersion =
@@ -127,13 +131,20 @@ internal static class Program
         }
     }
 
-    /// <summary>检查服务器是否有更新的引导器；有则下载并覆盖自己（bat 延迟替换），返回 true。</summary>
+    /// <summary>检查服务器是否有更新的引导器；先弹窗询问用户，确认后才下载并覆盖自己（bat 延迟替换），返回 true。</summary>
     private static bool TrySelfUpdate(string appDir)
     {
         try
         {
             var text = GetText(VersionFile);
             if (!Version.TryParse(text.Trim().TrimStart('v'), out var latest) || latest <= SelfVersion)
+                return false;
+
+            // 更新前必须提示用户确认，不做静默更新（用户拒绝则本次不更新，正常运行旧版）
+            var ask = MessageBoxW(IntPtr.Zero,
+                $"发现新版本 v{latest}，是否立即更新？\n更新过程约需几秒，完成后自动重启。",
+                "剪贴板助手", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON1);
+            if (ask != IDYES)
                 return false;
 
             // 下载新版引导器
