@@ -249,7 +249,8 @@
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock Text="{Binding Content}"
+                                <!-- 文件条目：图标 + 文件名（完整路径在 Content，预览/打开时用） -->
+                                <TextBlock Text="{Binding DisplayContent}"
                                            TextWrapping="Wrap"
                                            LineHeight="19"
                                            MaxHeight="38"

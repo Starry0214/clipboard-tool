@@ -68,10 +68,14 @@ public sealed class ClipboardStore : IDisposable
 
     public int MaxEntries { get; set; } = 500;
 
-    /// <summary>原图保存为 PNG 文件（图片不再以 BLOB 入库），返回文件路径。</summary>
+    /// <summary>原图保存为 PNG 文件（图片不再以 BLOB 入库），返回文件路径。
+    /// 文件名用时间戳（可读，列表显示名称时避免 UUID 哈希值）；同一秒多张图追加 (1)/(2) 后缀。</summary>
     public string SaveImageFile(byte[] png)
     {
-        var path = Path.Combine(_imagesDir, $"{Guid.NewGuid():N}.png");
+        var stem = $"剪贴板_{DateTimeOffset.Now.ToUnixTimeSeconds()}";
+        var path = Path.Combine(_imagesDir, $"{stem}.png");
+        for (var i = 1; File.Exists(path); i++)
+            path = Path.Combine(_imagesDir, $"{stem} ({i}).png");
         File.WriteAllBytes(path, png);
         return path;
     }
@@ -197,8 +201,13 @@ public sealed class ClipboardStore : IDisposable
                 Id = reader.GetInt64(0),
                 Type = entryType,
                 Content = content,
-                // 列表显示截断：超长文本（如整篇文档）会让 WPF 换行测量全文，布局卡死
-                DisplayContent = entryType == "text" && content.Length > 200 ? content[..200] : content,
+                // 列表显示截断：超长文本（如整篇文档）会让 WPF 换行测量全文，布局卡死；
+                // 图片/文件条目只显示文件名（完整路径在 Content，预览/打开时用）
+                DisplayContent = entryType switch
+                {
+                    "image" or "file" => Path.GetFileName(content),
+                    _ => content.Length > 200 ? content[..200] : content,
+                },
                 Thumb = reader.IsDBNull(3) ? null : (byte[])reader[3],
                 Pinned = reader.GetInt64(4) != 0,
                 CreatedAt = reader.GetInt64(5),

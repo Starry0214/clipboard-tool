@@ -221,7 +221,8 @@ public sealed class SyncService : IDisposable
             var mediaId = await _client!.UploadMediaAsync(data);
             if (mediaId is not null)
             {
-                var name = entry.Type == "image" ? $"image_{entry.Id}.png" : Path.GetFileName(entry.Content);
+                // 图片/文件都用文件名（可读，避免另一端显示 UUID/哈希名）
+                var name = Path.GetFileName(entry.Content);
                 await _client.SendClipAsync(entry.Type == "image" ? "clip_image" : "clip_file", mediaId.Value, name, data.Length);
                 return;
             }
