@@ -220,6 +220,18 @@ public sealed class ClipboardStore : IDisposable
         return list;
     }
 
+    /// <summary>查询全部图片条目：返回 (id, content 文件路径, thumb)。启动自愈用——thumb 存在但全透明的旧数据也要重生成。</summary>
+    public List<(long Id, string Content, byte[]? Thumb)> GetAllImages()
+    {
+        var list = new List<(long, string, byte[]?)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT id, content, thumb FROM entries WHERE type = 'image'";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            list.Add((reader.GetInt64(0), reader.GetString(1), reader.IsDBNull(2) ? null : (byte[])reader[2]));
+        return list;
+    }
+
     /// <summary>更新条目缩略图（启动自愈补生成）。</summary>
     public void UpdateThumb(long id, byte[] thumb)
     {

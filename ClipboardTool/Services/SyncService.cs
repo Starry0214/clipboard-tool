@@ -436,7 +436,8 @@ public sealed class SyncService : IDisposable
         try
         {
             var src = ClipboardMonitor.DecodePng(png);
-            return ClipboardMonitor.EncodePng(ClipboardMonitor.MakeThumb(src, 200));
+            // alpha 全 0（剪贴板 DIB 不可信 alpha / 历史坏数据）→ 转不透明，缩略图才不会全透明
+            return ClipboardMonitor.EncodePng(ClipboardMonitor.MakeThumb(ClipboardMonitor.FixUntrustedAlpha(src), 200));
         }
         catch (Exception)
         {
@@ -444,17 +445,27 @@ public sealed class SyncService : IDisposable
         }
     }
 
-    /// 启动时修复缩略图缺失的图片条目：旧版本按 PNG 硬解码，手机端分享的 JPEG（存 .png 扩展名）解码失败
+    /// 启动时修复图片条目：旧版本按 PNG 硬解码，手机端分享的 JPEG（存 .png 扩展名）解码失败
     /// 导致 thumb 为空、列表无预览；DecodePng 改为自动识别格式后，启动时对历史数据补生成缩略图。
+    /// 另修复剪贴板 DIB alpha 不可信的历史数据：缩略图全透明（alpha 全 0）时重生成并重写原图为不透明。
     public void RepairMissingThumbs()
     {
-        foreach (var (id, content) in _store.GetThumblessImages())
+        foreach (var (id, content, thumb) in _store.GetAllImages())
         {
             try
             {
                 if (string.IsNullOrEmpty(content) || !File.Exists(content)) continue;
-                var thumb = MakeThumbBytes(File.ReadAllBytes(content));
-                if (thumb is not null) _store.UpdateThumb(id, thumb);
+                // 已有正常缩略图（存在非全透明 alpha）则跳过；全透明/缺失才重生成
+                if (thumb is not null && ClipboardMonitor.HasAlphaChannel(ClipboardMonitor.DecodePng(thumb)))
+                    continue;
+                var bytes = File.ReadAllBytes(content);
+                var src = ClipboardMonitor.DecodePng(bytes);
+                // 原图 alpha 全 0 → 重写为不透明 PNG，粘贴到其他应用也恢复正常
+                var fixedSrc = ClipboardMonitor.FixUntrustedAlpha(src);
+                if (!ReferenceEquals(fixedSrc, src))
+                    File.WriteAllBytes(content, ClipboardMonitor.EncodePng(fixedSrc));
+                var newThumb = ClipboardMonitor.EncodePng(ClipboardMonitor.MakeThumb(fixedSrc, 200));
+                _store.UpdateThumb(id, newThumb);
             }
             catch (Exception)
             {

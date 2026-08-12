@@ -98,6 +98,9 @@ public sealed class ClipboardMonitor
         {
             if (data.GetData(DataFormats.Bitmap) is BitmapSource bmp && bmp.PixelWidth > 0)
             {
+                // 剪贴板 32bpp DIB 位图的 alpha 通道常不可信（来源复制时 alpha 全 0 但 RGB 有效），
+                // 原样保存会导致 PNG 与缩略图全透明、WPF 渲染空白（查看器忽略 alpha 显示正常）
+                bmp = FixUntrustedAlpha(bmp);
                 // 原图保存为 PNG 文件（Content 记录文件路径，粘贴纯文本时可给出路径）
                 var png = EncodePng(bmp);
                 var thumb = EncodePng(MakeThumb(bmp, 200));
@@ -161,5 +164,35 @@ public sealed class ClipboardMonitor
         // 若固定用 PngBitmapDecoder 会解码失败导致缩略图为空
         var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         return decoder.Frames[0];
+    }
+
+    /// <summary>剪贴板 32bpp DIB 位图的 alpha 通道常不可信：部分来源复制时 alpha 全 0 但 RGB 内容有效，
+    /// 查看器/画图忽略 alpha 显示正常，WPF 渲染则全透明。检测 alpha 全 0 时丢弃 alpha 转不透明 Bgr24；
+    /// 存在非 0 alpha（真透明图）则原样保留。</summary>
+    internal static BitmapSource FixUntrustedAlpha(BitmapSource src)
+    {
+        if (HasAlphaChannel(src))
+            return src;
+        var opaque = new FormatConvertedBitmap(src, PixelFormats.Bgr24, null, 0);
+        opaque.Freeze();
+        return opaque;
+    }
+
+    /// <summary>检测位图 alpha 通道是否存在非 0 像素（全 0 视为 alpha 不可信/全透明，无 alpha 格式视为不透明）。</summary>
+    internal static bool HasAlphaChannel(BitmapSource src)
+    {
+        if (src.Format != PixelFormats.Bgra32 && src.Format != PixelFormats.Pbgra32)
+            return true; // 无 alpha 通道（Bgr24 等）视为不透明，无需处理
+        var w = src.PixelWidth;
+        var h = src.PixelHeight;
+        var stride = (w * 4 + 3) / 4 * 4;
+        var buf = new byte[stride * h];
+        src.CopyPixels(new Int32Rect(0, 0, w, h), buf, stride, 0);
+        for (var i = 3; i < buf.Length; i += 4)
+        {
+            if (buf[i] != 0)
+                return true;
+        }
+        return false;
     }
 }
