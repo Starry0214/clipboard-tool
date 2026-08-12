@@ -11,7 +11,7 @@ public sealed class TrayIcon : IDisposable
 
     public event Action? OpenMain;
     public event Action? TogglePause;
-    public event Action? ClearHistory;
+    public event Action<bool>? ClearHistory;
     public event Action? ShowHelp;
     public event Action? CheckUpdate;
     public event Action? Feedback;
@@ -26,6 +26,8 @@ public sealed class TrayIcon : IDisposable
         var miFeedback = new ToolStripMenuItem("反馈问题");
         var miPause = new ToolStripMenuItem("暂停记录剪贴板") { CheckOnClick = true };
         var miClear = new ToolStripMenuItem("清空历史");
+        miClear.DropDownItems.Add("本机清空", null, (_, _) => ClearHistory?.Invoke(false));
+        miClear.DropDownItems.Add("彻底清空（多端）", null, (_, _) => ClearHistory?.Invoke(true));
         var miExit = new ToolStripMenuItem("退出");
 
         miOpen.Click += (_, _) => OpenMain?.Invoke();
@@ -33,7 +35,6 @@ public sealed class TrayIcon : IDisposable
         miUpdate.Click += (_, _) => CheckUpdate?.Invoke();
         miFeedback.Click += (_, _) => Feedback?.Invoke();
         miPause.CheckedChanged += (_, _) => TogglePause?.Invoke();
-        miClear.Click += (_, _) => ClearHistory?.Invoke();
         miExit.Click += (_, _) => Exit?.Invoke();
 
         menu.Items.Add(miOpen);

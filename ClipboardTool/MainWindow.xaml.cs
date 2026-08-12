@@ -161,11 +161,37 @@ public partial class MainWindow : Window
 
     private void OnClear(object sender, RoutedEventArgs e)
     {
+        // 二级选项：本机清空 / 彻底清空（多端）
+        if (sender is not Button btn)
+            return;
+        var menu = new ContextMenu();
+        var miLocal = new MenuItem { Header = "本机清空" };
+        miLocal.Click += (_, _) => ClearLocal();
+        var miFull = new MenuItem { Header = "彻底清空（多端）" };
+        miFull.Click += (_, _) => ClearFull();
+        menu.Items.Add(miLocal);
+        menu.Items.Add(miFull);
+        menu.PlacementTarget = btn;
+        menu.IsOpen = true;
+    }
+
+    private void ClearLocal()
+    {
         var result = MessageBox.Show(this, "确定要清空全部历史记录吗？置顶条目将保留。", "清空历史",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes)
             return;
-        _store.Clear();
+        (Application.Current as App)?.SyncService?.ClearAll(fully: false);
+        Refresh();
+    }
+
+    private void ClearFull()
+    {
+        var result = MessageBox.Show(this, "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。", "彻底清空",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+            return;
+        (Application.Current as App)?.SyncService?.ClearAll(fully: true);
         Refresh();
     }
 

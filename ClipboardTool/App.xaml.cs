@@ -354,12 +354,15 @@ public partial class App : Application
         _tray.SetPaused(_monitor.Paused);
     }
 
-    private void OnClearHistory()
+    private void OnClearHistory(bool fully)
     {
-        var result = MessageBox.Show("确定要清空全部历史记录吗？置顶条目将保留。", "清空历史",
+        var msg = fully
+            ? "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。"
+            : "确定要清空全部历史记录吗？置顶条目将保留。";
+        var result = MessageBox.Show(msg, fully ? "彻底清空" : "清空历史",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result == MessageBoxResult.Yes)
-            _store.Clear();
+            _sync?.ClearAll(fully);
     }
 
     private void OnExitRequested()
