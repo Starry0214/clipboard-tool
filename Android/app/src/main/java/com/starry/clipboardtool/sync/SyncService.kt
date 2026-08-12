@@ -10,8 +10,10 @@ import com.starry.clipboardtool.net.SyncClient
 import com.starry.clipboardtool.net.SyncMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -22,6 +24,8 @@ class SyncService(private val context: Context) {
     var onStatus: (String) -> Unit = {}
     var onHistoryChanged: () -> Unit = {}
     private var client: SyncClient? = null
+    /** WS 断开期间 HTTP 增量轮询兜底任务。 */
+    private var pollingJob: Job? = null
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -95,10 +99,29 @@ class SyncService(private val context: Context) {
             }
             main.post { onHistoryChanged() }
         }
+        // WS 断开期间 HTTP 增量轮询兜底：境外中继对长连接不稳，WS 可能长时间连不上，
+        // 轮询保证消息不因 WS 断线而丢失（WS 恢复后实时推送接管，轮询自动跳过）
+        pollingJob?.cancel()
+        pollingJob = scope.launch {
+            while (isActive) {
+                delay(30_000)
+                val cl = client ?: continue
+                if (cl.isConnected()) continue
+                val hist = cl.fetchHistory(AppState.lastSeq) ?: continue
+                hist.forEach { m ->
+                    if (m.seq > 0 && m.seq <= AppState.lastSeq) return@forEach
+                    applyRemote(m, writeClipboard = false)
+                    if (m.seq > AppState.lastSeq) AppState.lastSeq = m.seq
+                }
+                main.post { onHistoryChanged() }
+            }
+        }
     }
 
     fun stop() {
         running = false
+        pollingJob?.cancel()
+        pollingJob = null
         client?.close()
         client = null
     }
