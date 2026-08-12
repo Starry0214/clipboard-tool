@@ -208,6 +208,28 @@ public sealed class ClipboardStore : IDisposable
         return list;
     }
 
+    /// <summary>查询缩略图缺失的图片条目（启动自愈用）：返回 (id, content 文件路径)。</summary>
+    public List<(long Id, string Content)> GetThumblessImages()
+    {
+        var list = new List<(long, string)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT id, content FROM entries WHERE type = 'image' AND thumb IS NULL";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            list.Add((reader.GetInt64(0), reader.GetString(1)));
+        return list;
+    }
+
+    /// <summary>更新条目缩略图（启动自愈补生成）。</summary>
+    public void UpdateThumb(long id, byte[] thumb)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "UPDATE entries SET thumb = $thumb WHERE id = $id";
+        cmd.Parameters.AddWithValue("$thumb", thumb);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
     /// <summary>取含原图的完整条目（回贴用）。图片原图优先从 DB BLOB（旧数据）读取，否则从文件读取。</summary>
     public Entry? GetById(long id)
     {

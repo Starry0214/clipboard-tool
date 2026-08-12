@@ -87,6 +87,7 @@ public partial class App : Application
         _settings.ApplyAutoStart();
 
         _sync = new SyncService(_store, _monitor, _settings, DataDir);
+        _sync.RepairMissingThumbs(); // 修复历史缩略图缺失（JPEG 伪 png 旧版解码失败遗留）
         if (_settings.SyncEnabled)
             _ = _sync.StartAsync();
 

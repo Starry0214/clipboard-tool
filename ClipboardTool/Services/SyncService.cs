@@ -426,6 +426,25 @@ public sealed class SyncService : IDisposable
         }
     }
 
+    /// 启动时修复缩略图缺失的图片条目：旧版本按 PNG 硬解码，手机端分享的 JPEG（存 .png 扩展名）解码失败
+    /// 导致 thumb 为空、列表无预览；DecodePng 改为自动识别格式后，启动时对历史数据补生成缩略图。
+    public void RepairMissingThumbs()
+    {
+        foreach (var (id, content) in _store.GetThumblessImages())
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(content) || !File.Exists(content)) continue;
+                var thumb = MakeThumbBytes(File.ReadAllBytes(content));
+                if (thumb is not null) _store.UpdateThumb(id, thumb);
+            }
+            catch (Exception)
+            {
+                // 单个条目修复失败不影响其他
+            }
+        }
+    }
+
     public void Dispose()
     {
         _cts?.Cancel();

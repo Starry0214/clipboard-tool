@@ -153,11 +153,13 @@ public sealed class ClipboardMonitor
         return new TransformedBitmap(src, new ScaleTransform(scale, scale));
     }
 
-    /// <summary>byte[] PNG → BitmapSource（供回贴与 UI 展示）。</summary>
-    internal static BitmapSource DecodePng(byte[] png)
+    /// <summary>byte[] 图片（PNG/JPEG 等，按文件头自动识别格式）→ BitmapSource（供回贴与 UI 展示）。</summary>
+    internal static BitmapSource DecodePng(byte[] bytes)
     {
-        using var ms = new MemoryStream(png);
-        var decoder = new PngBitmapDecoder(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        using var ms = new MemoryStream(bytes);
+        // BitmapDecoder.Create 按文件头自动选择解码器：手机端分享的图片常是 JPEG 但存成 .png 扩展名，
+        // 若固定用 PngBitmapDecoder 会解码失败导致缩略图为空
+        var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         return decoder.Frames[0];
     }
 }
