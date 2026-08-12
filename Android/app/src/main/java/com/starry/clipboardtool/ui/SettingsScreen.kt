@@ -1,7 +1,13 @@
 package com.starry.clipboardtool.ui
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -27,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.starry.clipboardtool.AppState
 import com.starry.clipboardtool.UpdateChecker
 import com.starry.clipboardtool.Updater
@@ -96,6 +103,31 @@ fun SettingsScreen(onBack: () -> Unit, onLogin: () -> Unit = {}, onLogout: () ->
                 "未登录时仅可使用本地功能，登录后可多端同步。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        SectionCard("权限") {
+            val notifGranted = remember {
+                mutableStateOf(ContextCompat.checkSelfPermission(context,
+                    Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+            }
+            val permLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()) { granted -> notifGranted.value = granted }
+            Text("通知权限：分享同步在后台进行时，用于在通知栏显示进度与结果。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = {
+                if (notifGranted.value) {
+                    // 已允许：跳系统应用详情页，由用户手动关闭（Android 不支持编程式撤回运行时权限）
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null))
+                    context.startActivity(intent)
+                } else {
+                    permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }) {
+                Text(if (notifGranted.value) "已允许（点击撤回）" else "允许通知")
+            }
         }
 
         SectionCard("关于") {
