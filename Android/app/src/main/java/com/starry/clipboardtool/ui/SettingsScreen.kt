@@ -91,23 +91,33 @@ fun SettingsScreen(onBack: () -> Unit, onLogin: () -> Unit = {}, onLogout: () ->
             val storage = remember { AppState.store.storageUsage() }
             var syncing by remember { mutableStateOf(false) }
             var syncProgress by remember { mutableStateOf(0f) }
+            var syncBytes by remember { mutableStateOf("") }
             Text("存储占用：${formatSize(storage)}", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
             Button(onClick = {
                 syncing = true
                 syncProgress = 0f
+                syncBytes = ""
                 syncResult = ""
                 AppState.syncService?.syncFromServer(
                     onDone = { result ->
                         syncing = false
                         syncResult = result
                     },
-                    onProgress = { p -> syncProgress = p })
+                    onProgress = { done, total ->
+                        syncProgress = if (total > 0) done.toFloat() / total else 0f
+                        syncBytes = "${formatSize(done)} / ${formatSize(total)}"
+                    })
             }, enabled = loggedIn && !syncing) { Text(if (syncing) "同步中…" else "同步服务器到本地") }
             if (syncing) {
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(progress = syncProgress,
                     modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(4.dp))
+                if (syncBytes.isNotEmpty()) {
+                    Text(syncBytes, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             if (syncResult.isNotEmpty()) {
                 Text(syncResult, style = MaterialTheme.typography.bodyMedium)

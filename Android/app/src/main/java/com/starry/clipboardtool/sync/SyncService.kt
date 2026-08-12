@@ -104,8 +104,8 @@ class SyncService(private val context: Context) {
     }
 
     /** 手动同步服务器到本地：全量拉取最近 7 天入库（不按 seq 过滤——本地删除后可从服务器找回；store 哈希去重兜底）。
-     * onProgress(0f~1f) 按已处理条数/总数推进（main 线程回调）。 */
-    fun syncFromServer(onDone: (String) -> Unit, onProgress: (Float) -> Unit = {}) {
+     * onProgress(doneBytes, totalBytes) 按内容字节累计推进（main 线程回调），文本按内容字节、图片/文件按 media 大小。 */
+    fun syncFromServer(onDone: (String) -> Unit, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
         val c = client
         if (c == null) {
             onDone("未连接，无法同步")
@@ -119,20 +119,29 @@ class SyncService(private val context: Context) {
                 main.post { onDone("同步失败：无法连接服务器") }
                 return@launch
             }
-            val total = history.size.coerceAtLeast(1)
-            history.forEachIndexed { i, m ->
+            val totalBytes = history.sumOf { msgBytes(it) }.coerceAtLeast(1)
+            var doneBytes = 0L
+            history.forEach { m ->
                 applyRemote(m, writeClipboard = false)
                 if (m.seq > maxSeq) maxSeq = m.seq
                 n++
-                main.post { onProgress((i + 1).toFloat() / total) }
+                doneBytes += msgBytes(m)
+                main.post { onProgress(doneBytes, totalBytes) }
             }
             AppState.lastSeq = maxSeq
             main.post {
                 onHistoryChanged()
-                onProgress(1f)
+                onProgress(totalBytes, totalBytes)
                 onDone("同步完成（处理 $n 条）")
             }
         }
+    }
+
+    /** 条目同步字节量：文本按内容字节，图片/文件按服务器 media 大小（下载量），delete 等为 0。 */
+    private fun msgBytes(m: SyncMessage): Long = when (m.type) {
+        "clip_text" -> m.text?.toByteArray()?.size?.toLong() ?: 0L
+        "clip_image", "clip_file" -> m.size
+        else -> 0L
     }
 
     /** 剪贴板监听回调：读剪贴板 → 入库 → 上传（去重与上传解耦，已入库未上传的内容可补传）。 */
