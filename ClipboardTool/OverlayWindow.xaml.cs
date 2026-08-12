@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -7,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using Microsoft.Win32;
 using Point = System.Windows.Point;
 
 namespace ClipboardTool;
@@ -397,6 +400,81 @@ public partial class OverlayWindow : Window
         // 强制纯文本：文本=内容、文件=路径、图片=尺寸信息
         Paster.Paste(_monitor, full, plainTextOnly: true);
         RequestHide();
+    }
+
+    /// <summary>另存为：文本写入 .txt、图片/文件复制原文件到指定位置（图片默认扩展名按真实格式）。</summary>
+    private void OnSaveAs(object sender, RoutedEventArgs e)
+    {
+        if (ContextEntry(sender) is not Entry entry)
+            return;
+        var full = _store.GetById(entry.Id) ?? entry;
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string fileName, filter;
+        if (full.Type == "text")
+        {
+            fileName = $"剪贴板文本_{stamp}.txt";
+            filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*";
+        }
+        else
+        {
+            // 图片/文件：默认扩展名按真实格式（手机端 JPEG 内容可能存成 .png 扩展名）
+            var ext = full.Type == "image" ? RealImageExt(full.Content) : Path.GetExtension(full.Content);
+            fileName = full.Type == "image"
+                ? $"剪贴板图片_{stamp}{ext}"
+                : Path.GetFileName(full.Content);
+            filter = "所有文件 (*.*)|*.*";
+        }
+        var dlg = new SaveFileDialog
+        {
+            Title = "另存为",
+            FileName = fileName,
+            Filter = filter,
+            AddExtension = true,
+        };
+        if (dlg.ShowDialog(this) != true)
+            return;
+        try
+        {
+            if (full.Type == "text")
+                File.WriteAllText(dlg.FileName, full.Content, new UTF8Encoding(false));
+            else
+            {
+                if (string.IsNullOrEmpty(full.Content) || !File.Exists(full.Content))
+                {
+                    MessageBox.Show(this, "原文件已不存在，无法另存为。", "剪贴板助手",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                File.Copy(full.Content, dlg.FileName, overwrite: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"另存为失败：{ex.Message}", "剪贴板助手",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>按文件头识别真实图片格式扩展名（.png/.jpg/.gif/.bmp/.webp），识别失败回退 .png。</summary>
+    private static string RealImageExt(string path)
+    {
+        try
+        {
+            using var fs = File.OpenRead(path);
+            var head = new byte[12];
+            if (fs.Read(head, 0, head.Length) < head.Length)
+                return ".png";
+            if (head[0] == 0x89 && head[1] == 0x50 && head[2] == 0x4E && head[3] == 0x47) return ".png";
+            if (head[0] == 0xFF && head[1] == 0xD8) return ".jpg";
+            if (head[0] == 'G' && head[1] == 'I' && head[2] == 'F') return ".gif";
+            if (head[0] == 'B' && head[1] == 'M') return ".bmp";
+            if (head[0] == 'R' && head[1] == 'I' && head[2] == 'F' && head[3] == 'F') return ".webp";
+            return ".png";
+        }
+        catch (Exception)
+        {
+            return ".png";
+        }
     }
 }
 
