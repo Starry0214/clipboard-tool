@@ -2,6 +2,8 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace ClipboardTool;
@@ -172,19 +174,33 @@ public static class Paster
         return h;
     }
 
-    /// <summary>PNG BLOB → System.Drawing.Bitmap。</summary>
-    private static Bitmap BitmapFromPng(byte[] png)
+    /// <summary>图片 BLOB（PNG/JPEG 等，按文件头自动识别格式）→ System.Drawing.Bitmap。
+    /// 手机端分享的图片常是 JPEG 但存成 .png 扩展名，固定用 PngBitmapDecoder 会解码失败导致粘贴无反应。</summary>
+    private static Bitmap BitmapFromPng(byte[] bytes)
     {
-        using var ms = new MemoryStream(png);
-        var decoder = new PngBitmapDecoder(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        var src = decoder.Frames[0];
+        using var ms = new MemoryStream(bytes);
+        var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        return BitmapFromSource(decoder.Frames[0]);
+    }
 
-        using var outMs = new MemoryStream();
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(src));
-        encoder.Save(outMs);
-        outMs.Position = 0;
-        return new Bitmap(outMs);
+    /// <summary>BitmapSource → 32bppArgb Bitmap：直接拷贝像素，跳过 PNG 重编码（大图 PNG 编码是粘贴卡顿主因）。</summary>
+    private static Bitmap BitmapFromSource(BitmapSource src)
+    {
+        var src32 = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+        src32.Freeze();
+        var w = src32.PixelWidth;
+        var h = src32.PixelHeight;
+        var bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
+        {
+            src32.CopyPixels(new Int32Rect(0, 0, w, h), data.Scan0, data.Stride * h, data.Stride);
+        }
+        finally
+        {
+            bmp.UnlockBits(data);
+        }
+        return bmp;
     }
 
     /// <summary>Bitmap → 32bpp DIB（BITMAPINFOHEADER + 自底向上像素数据）。返回的句柄由调用方管理。</summary>
@@ -192,7 +208,7 @@ public static class Paster
     {
         const int headerSize = 40; // BITMAPINFOHEADER
         var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
-        var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         try
         {
             var stride = Math.Abs(bmpData.Stride);
