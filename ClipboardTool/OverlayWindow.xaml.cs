@@ -361,7 +361,7 @@ public partial class OverlayWindow : Window
         if (ContextEntry(sender) is not Entry entry)
             return;
         _keepOpenAfterMenu = true; // 非粘贴操作不关闭列表
-        _store.SetPinned(entry.Id, !entry.Pinned);
+        (Application.Current as App)?.SyncService?.SetPinned(entry, !entry.Pinned);
         Reload();
     }
 

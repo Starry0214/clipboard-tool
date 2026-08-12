@@ -337,6 +337,42 @@ public sealed class SyncService : IDisposable
         _store.Delete(entry.Id);
     }
 
+    /// <summary>置顶/取消置顶：本地设置 + 发 pin 消息（跨端同步）。</summary>
+    public void SetPinned(Entry entry, bool pinned)
+    {
+        if (_running && _client is not null)
+        {
+            var hash = ComputeSyncHash(entry);
+            if (hash is not null)
+                _ = Task.Run(async () =>
+                {
+                    for (var attempt = 0; attempt < 3; attempt++)
+                    {
+                        if (await _client.SendPinAsync(hash, pinned))
+                            return;
+                        await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
+                    }
+                });
+        }
+        _store.SetPinned(entry.Id, pinned);
+    }
+
+    /// <summary>清空历史。fully=false 仅本机；fully=true 发 clear 标记（其他设备/服务器随后清除）。置顶条目均保留。</summary>
+    public void ClearAll(bool fully)
+    {
+        if (fully && _running && _client is not null)
+            _ = Task.Run(async () =>
+            {
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    if (await _client.SendClearAsync())
+                        return;
+                    await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
+                }
+            });
+        _store.Clear();
+    }
+
     private string? ComputeSyncHash(Entry entry)
     {
         if (entry.Type == "text")
@@ -365,6 +401,12 @@ public sealed class SyncService : IDisposable
             case "delete" when !string.IsNullOrEmpty(m.Hash):
                 _store.DeleteByHash(m.Hash!);
                 break;
+            case "pin" when !string.IsNullOrEmpty(m.Hash) && m.Pinned is not null:
+                _store.SetPinnedByHash(m.Hash!, m.Pinned.Value);
+                break;
+            case "clear":
+                _store.Clear();
+                break;
             case "clip_text" when !string.IsNullOrEmpty(m.Text):
             {
                 var entry = new Entry
@@ -392,9 +434,12 @@ public sealed class SyncService : IDisposable
         if (bytes is null || bytes.Length == 0)
             return;
         var safeName = SanitizeName(m.Name ?? (type == "image" ? "image.png" : "file.bin"));
-        var localPath = type == "image"
+        // 图片/文件都用服务器传来的原始文件名（分享图片有 DISPLAY_NAME 原名）；仅本地剪贴板位图无名字时走时间戳命名
+        var localPath = type == "image" && string.IsNullOrEmpty(m.Name)
             ? _store.SaveImageFile(bytes)
-            : Path.Combine(_filesDir, UniqueFileName(_filesDir, safeName));
+            : type == "image"
+                ? _store.SaveImageFileAs(safeName, bytes)
+                : Path.Combine(_filesDir, UniqueFileName(_filesDir, safeName));
         if (type == "file")
             File.WriteAllBytes(localPath, bytes);
         var entry = new Entry

@@ -144,7 +144,7 @@ public partial class MainWindow : Window
     {
         if (HistoryList.SelectedItem is not Entry entry)
             return;
-        _store.SetPinned(entry.Id, !entry.Pinned);
+        (Application.Current as App)?.SyncService?.SetPinned(entry, !entry.Pinned);
         Refresh();
     }
 

@@ -80,6 +80,29 @@ public sealed class ClipboardStore : IDisposable
         return path;
     }
 
+    /// <summary>按原始文件名保存图片到 images 目录（资源管理器复制图片/同步接收时保留原名），重名追加 (1)/(2) 后缀。</summary>
+    public string SaveImageFileAs(string name, byte[] png)
+    {
+        var safe = Path.GetFileName(name);
+        var path = Path.Combine(_imagesDir, safe);
+        if (!File.Exists(path))
+        {
+            File.WriteAllBytes(path, png);
+            return path;
+        }
+        var stem = Path.GetFileNameWithoutExtension(safe);
+        var ext = Path.GetExtension(safe);
+        for (var i = 1; ; i++)
+        {
+            path = Path.Combine(_imagesDir, $"{stem} ({i}){ext}");
+            if (!File.Exists(path))
+            {
+                File.WriteAllBytes(path, png);
+                return path;
+            }
+        }
+    }
+
     /// <summary>新增条目。按内容哈希去重（文本/文件按内容、图片按像素字节），重复则刷新时间并移顶。返回是否新增（去重时返回 false）。</summary>
     public bool Add(Entry e)
     {
@@ -291,6 +314,16 @@ public sealed class ClipboardStore : IDisposable
         cmd.CommandText = "UPDATE entries SET pinned = $pinned WHERE id = $id";
         cmd.Parameters.AddWithValue("$pinned", pinned ? 1 : 0);
         cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>按内容哈希设置置顶（同步 pin 消息应用）。</summary>
+    public void SetPinnedByHash(string hash, bool pinned)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "UPDATE entries SET pinned = $pinned WHERE hash = $hash COLLATE NOCASE";
+        cmd.Parameters.AddWithValue("$pinned", pinned ? 1 : 0);
+        cmd.Parameters.AddWithValue("$hash", hash);
         cmd.ExecuteNonQuery();
     }
 
