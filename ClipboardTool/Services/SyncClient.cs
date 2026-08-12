@@ -8,7 +8,7 @@ namespace ClipboardTool;
 /// <summary>同步服务器消息（WS 下行信封 / history 条目）。</summary>
 public sealed record SyncMessage(
     string Type, long OriginDeviceId, long Seq, long Ts,
-    string? Text, string? MediaId, string? Name, long Size, string? Hash = null);
+    string? Text, string? MediaId, string? Name, long Size, string? Hash = null, bool? Pinned = null);
 
 /// <summary>
 /// 同步服务器客户端：注册/登录、媒体上传下载、历史拉取、WS 长连接（自动重连）。
@@ -146,6 +146,7 @@ public sealed class SyncClient : IDisposable
     {
         string? mediaId = null, name = null, text = null, hash = null;
         long size = 0;
+        bool? pinned = null;
         if (m.TryGetProperty("payload", out var payload))
         {
             if (payload.ValueKind == JsonValueKind.Object)
@@ -155,6 +156,7 @@ public sealed class SyncClient : IDisposable
                 if (payload.TryGetProperty("name", out var n)) name = n.GetString();
                 if (payload.TryGetProperty("size", out var sz)) size = sz.GetInt64();
                 if (payload.TryGetProperty("hash", out var h)) hash = h.GetString();
+                if (payload.TryGetProperty("pinned", out var pn)) pinned = pn.GetBoolean();
             }
             else if (payload.ValueKind == JsonValueKind.String)
             {
@@ -166,7 +168,7 @@ public sealed class SyncClient : IDisposable
             m.TryGetProperty("originDeviceId", out var od) ? od.GetInt64() : 0,
             m.TryGetProperty("seq", out var sq) ? sq.GetInt64() : 0,
             m.TryGetProperty("ts", out var ts) ? ts.GetInt64() : 0,
-            text, mediaId, name, size, hash);
+            text, mediaId, name, size, hash, pinned);
     }
 
     /// <summary>建立 WS 长连接并进入读循环；断线自动退避重连直到取消。</summary>
@@ -258,6 +260,18 @@ public sealed class SyncClient : IDisposable
     public async Task<bool> SendDeleteAsync(string hash)
     {
         return await SendAsync(JsonSerializer.Serialize(new { type = "delete", payload = new { hash } }));
+    }
+
+    /// <summary>发送置顶/取消置顶（hash 为内容哈希）。失败可重试。</summary>
+    public async Task<bool> SendPinAsync(string hash, bool pinned)
+    {
+        return await SendAsync(JsonSerializer.Serialize(new { type = "pin", payload = new { hash, pinned } }));
+    }
+
+    /// <summary>发送彻底清空标记。失败可重试。</summary>
+    public async Task<bool> SendClearAsync()
+    {
+        return await SendAsync(JsonSerializer.Serialize(new { type = "clear", payload = new { } }));
     }
 
     private async Task<bool> SendAsync(string json)
