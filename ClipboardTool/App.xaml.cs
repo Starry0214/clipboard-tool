@@ -356,13 +356,17 @@ public partial class App : Application
 
     private void OnClearHistory(bool fully)
     {
-        var msg = fully
-            ? "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。"
-            : "确定要清空全部历史记录吗？置顶条目将保留。";
-        var result = MessageBox.Show(msg, fully ? "彻底清空" : "清空历史",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (result == MessageBoxResult.Yes)
-            _sync?.ClearAll(fully);
+        var dlg = new ConfirmDialog(
+            fully ? "彻底清空" : "清空历史",
+            fully
+                ? "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。"
+                : "确定要清空全部历史记录吗？置顶条目将保留。",
+            fully ? "彻底清空" : "清空",
+            danger: fully,
+            subtitle: fully ? "所有设备同步清空，不可恢复" : "仅清除本机历史记录，不影响其他设备");
+        if (dlg.ShowDialog() != true || !dlg.Confirmed)
+            return;
+        _sync?.ClearAll(fully);
     }
 
     private void OnExitRequested()

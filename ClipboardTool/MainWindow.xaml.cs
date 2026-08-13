@@ -177,9 +177,12 @@ public partial class MainWindow : Window
 
     private void ClearLocal()
     {
-        var result = MessageBox.Show(this, "确定要清空全部历史记录吗？置顶条目将保留。", "清空历史",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (result != MessageBoxResult.Yes)
+        var dlg = new ConfirmDialog("清空历史", "确定要清空全部历史记录吗？置顶条目将保留。",
+            "清空", danger: false, subtitle: "仅清除本机历史记录，不影响其他设备")
+        {
+            Owner = this,
+        };
+        if (dlg.ShowDialog() != true || !dlg.Confirmed)
             return;
         (Application.Current as App)?.SyncService?.ClearAll(fully: false);
         Refresh();
@@ -187,9 +190,12 @@ public partial class MainWindow : Window
 
     private void ClearFull()
     {
-        var result = MessageBox.Show(this, "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。", "彻底清空",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (result != MessageBoxResult.Yes)
+        var dlg = new ConfirmDialog("彻底清空", "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。",
+            "彻底清空", danger: true, subtitle: "所有设备同步清空，不可恢复")
+        {
+            Owner = this,
+        };
+        if (dlg.ShowDialog() != true || !dlg.Confirmed)
             return;
         (Application.Current as App)?.SyncService?.ClearAll(fully: true);
         Refresh();
