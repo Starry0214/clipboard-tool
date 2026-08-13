@@ -10,31 +10,34 @@
         Icon="{StaticResource AppIcon}">
     <Border Background="{StaticResource CardBrush}"
             BorderBrush="{StaticResource CardBorderBrush}"
-            BorderThickness="1" CornerRadius="10" Margin="14">
-        <StackPanel Margin="18">
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+            BorderThickness="1" CornerRadius="12" Margin="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="3" Opacity="0.2" Color="#000000"/>
+        </Border.Effect>
+        <StackPanel Margin="20">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                 <!-- 警示/信息图标 -->
-                <Border x:Name="IconCircle" Width="40" Height="40" CornerRadius="20"
+                <Border x:Name="IconCircle" Width="44" Height="44" CornerRadius="22"
                         VerticalAlignment="Top">
                     <TextBlock x:Name="IconText"
-                               FontFamily="Segoe MDL2 Assets" FontSize="20"
+                               FontFamily="Segoe MDL2 Assets" FontSize="22"
                                Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
-                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock x:Name="TitleText"
-                               FontSize="15" FontWeight="SemiBold"
+                               FontSize="16" FontWeight="SemiBold"
                                Foreground="{StaticResource TextPrimaryBrush}"/>
                     <TextBlock x:Name="SubtitleText" FontSize="12"
-                               Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,0"/>
+                               Foreground="{StaticResource TextMutedBrush}" Margin="0,3,0,0"/>
                 </StackPanel>
             </StackPanel>
-            <TextBlock x:Name="MessageText" FontSize="13" LineHeight="20"
+            <TextBlock x:Name="MessageText" FontSize="13" LineHeight="21"
                        Foreground="{StaticResource TextPrimaryBrush}"
-                       TextWrapping="Wrap" Margin="0,0,0,18"/>
+                       TextWrapping="Wrap" Margin="0,0,0,20"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="取消" Style="{StaticResource FluentButtonSecondary}"
-                        Padding="16,7" IsCancel="True"/>
-                <Button x:Name="ConfirmBtn" Padding="16,7" Margin="10,0,0,0"
+                        Padding="18,8" IsCancel="True"/>
+                <Button x:Name="ConfirmBtn" Padding="18,8" Margin="10,0,0,0"
                         Click="OnConfirm"/>
             </StackPanel>
         </StackPanel>

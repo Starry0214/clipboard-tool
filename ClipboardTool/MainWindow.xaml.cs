@@ -161,15 +161,24 @@ public partial class MainWindow : Window
 
     private void OnClear(object sender, RoutedEventArgs e)
     {
-        // 二级选项：本机清空 / 彻底清空（多端）
+        // 二级选项：本机清空 / 彻底清空（多端）——Fluent 风格圆角菜单
         if (sender is not Button btn)
             return;
-        var menu = new ContextMenu();
-        var miLocal = new MenuItem { Header = "本机清空" };
+        var menu = new ContextMenu { Style = (Style)FindResource("FluentContextMenu") };
+        var miLocal = new MenuItem
+        {
+            Header = "本机清空",
+            Style = (Style)FindResource("FluentMenuItem"),
+        };
         miLocal.Click += (_, _) => ClearLocal();
-        var miFull = new MenuItem { Header = "彻底清空（多端）" };
+        var miFull = new MenuItem
+        {
+            Header = "彻底清空（多端）",
+            Style = (Style)FindResource("FluentMenuItem"),
+        };
         miFull.Click += (_, _) => ClearFull();
         menu.Items.Add(miLocal);
+        menu.Items.Add(new Separator { Style = (Style)FindResource("FluentMenuSeparator") });
         menu.Items.Add(miFull);
         menu.PlacementTarget = btn;
         menu.IsOpen = true;
