@@ -49,4 +49,6 @@ public partial class ConfirmDialog : Window
         Confirmed = true;
         DialogResult = true;
     }
+
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

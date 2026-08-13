@@ -36,4 +36,6 @@ public partial class DeleteDialog : Window
         Fully = true;
         DialogResult = true;
     }
+
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

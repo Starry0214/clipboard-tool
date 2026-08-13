@@ -161,52 +161,12 @@ public partial class MainWindow : Window
 
     private void OnClear(object sender, RoutedEventArgs e)
     {
-        // 二级选项：本机清空 / 彻底清空（多端）——Fluent 风格圆角菜单
-        if (sender is not Button btn)
+        // 单层交互：直接弹出清空选择对话框（本机清空 / 彻底清空（多端）），不再套二级菜单与二次确认
+        var loggedIn = (Application.Current as App)?.SyncService?.LoggedIn == true;
+        var dlg = new ClearDialog(loggedIn) { Owner = this };
+        if (dlg.ShowDialog() != true)
             return;
-        var menu = new ContextMenu { Style = (Style)FindResource("FluentContextMenu") };
-        var miLocal = new MenuItem
-        {
-            Header = "本机清空",
-            Style = (Style)FindResource("FluentMenuItem"),
-        };
-        miLocal.Click += (_, _) => ClearLocal();
-        var miFull = new MenuItem
-        {
-            Header = "彻底清空（多端）",
-            Style = (Style)FindResource("FluentMenuItem"),
-        };
-        miFull.Click += (_, _) => ClearFull();
-        menu.Items.Add(miLocal);
-        menu.Items.Add(new Separator { Style = (Style)FindResource("FluentMenuSeparator") });
-        menu.Items.Add(miFull);
-        menu.PlacementTarget = btn;
-        menu.IsOpen = true;
-    }
-
-    private void ClearLocal()
-    {
-        var dlg = new ConfirmDialog("清空历史", "确定要清空全部历史记录吗？置顶条目将保留。",
-            "清空", danger: false, subtitle: "仅清除本机历史记录，不影响其他设备")
-        {
-            Owner = this,
-        };
-        if (dlg.ShowDialog() != true || !dlg.Confirmed)
-            return;
-        (Application.Current as App)?.SyncService?.ClearAll(fully: false);
-        Refresh();
-    }
-
-    private void ClearFull()
-    {
-        var dlg = new ConfirmDialog("彻底清空", "确定要彻底清空吗？将同时清空其他设备上的历史，服务器数据在 7 天内自动清除，且不可恢复。置顶条目将保留。",
-            "彻底清空", danger: true, subtitle: "所有设备同步清空，不可恢复")
-        {
-            Owner = this,
-        };
-        if (dlg.ShowDialog() != true || !dlg.Confirmed)
-            return;
-        (Application.Current as App)?.SyncService?.ClearAll(fully: true);
+        (Application.Current as App)?.SyncService?.ClearAll(dlg.Fully);
         Refresh();
     }
 
