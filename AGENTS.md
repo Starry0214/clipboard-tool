@@ -25,6 +25,22 @@
 - **图片/文件条目只显示文件名**：列表绑定 `DisplayContent`（`ClipboardStore` 查询时对 image/file 取 `Path.GetFileName`），完整路径在 `Content`（预览/打开/另存为时用）。图片文件命名用 `剪贴板_时间戳.png` 而非 Guid/UUID（否则列表显示哈希名）；资源管理器复制图片时剪贴板同时含 FileDrop+Bitmap，用 FileDrop 的真实文件名（`SaveImageFileAs`）。
 - 版本号由两个 `csproj` 的 `<Version>` 控制（当前 1.4.6，**两处必须一致**），自动更新与它比较。`Launcher/embedded/ClipboardToolApp.exe`（被 gitignore）是主程序 exe 副本，解压时以实际 FileVersion 为准（`GetExeVersion` 自愈，见发布节）。
 - **更新说明分组规则（用户 2026-08-11）**：Windows 更新说明中联网同步相关条目单独归入【实验性功能：多端同步（可在设置中开启）】标题下，其他条目按正常列表排列。
+- **清空历史二级选项（2026-08-13）**：主窗口"清空"按钮（`MainWindow.OnClear` 弹 ContextMenu，须应用 `FluentContextMenu`/`FluentMenuItem` 样式）与托盘"清空历史"（子菜单）均为「本机清空 / 彻底清空（多端）」两项；确认框用统一 `ConfirmDialog`（非 MessageBox），破坏性操作确认按钮用 `DangerButton` 警示红。本机清空走 `SyncService.ClearAll(false)`（只删本机、保留置顶），彻底清空走 `ClearAll(true)`（另发 `clear` 消息，服务器/其他端随后清）。
+- **置顶多端同步（2026-08-13）**：置顶状态跨端同步。`SetPinned`（Windows）/`setPinned`（Android）= 本地置顶 + 发 `pin` 消息（payload `{hash, pinned}`，hash 为内容哈希）；收到 `pin` 按 hash 设置顶（Windows `ClipboardStore.SetPinnedByHash` / Android `setPinnedByHash`）。Windows 置顶入口是**主窗口顶部"置顶"按钮**（选中条目后点击，`OnPin`），不是右键菜单；Android 是长按菜单项。Android 列表排序 `ORDER BY pinned DESC, created_at DESC`。
+- **删除永不触碰源文件（2026-08-13 修复 bug）**：Windows 捕获本机复制文件时条目 `Content = 源文件路径`（`ClipboardMonitor.cs`），旧版 `TryDeleteFile` 会 `File.Delete` 它——删除历史会真删磁盘源文件！现已改为**只删 `App.DataDir` 目录内副本**（`TryDeleteFile` 校验 `full.StartsWith(_dataDir + 分隔符)`，目录外路径只删记录）。同步来的文件（`data/files/`）是副本照删；Android 端所有图片/文件都是私有目录副本，无此问题。
+- **统一确认对话框 `ConfirmDialog`（2026-08-13）**：替代系统 MessageBox 的确认场景（清空/彻底清空等）。**WPF 坑**：① `RelativeSource={RelativeSource Self}` 绑定的是控件自身（TextBlock）而非 Window——TextBlock 无 Title/Message 属性，绑定静默失败导致**对话框全空白**（实测踩坑）；正确做法是 x:Name + `InitializeComponent()` 后直接代码赋值，或 `DataContext="{Binding RelativeSource={RelativeSource Self}}"` 后简单绑定；② 构造函数里先设属性再 `InitializeComponent()`，XAML 属性值会覆盖；③ `Window.Title` 是 CLR 属性（非 DP）无变更通知，`{Binding Title}` 只在初始化时取一次值。
+
+## 多端同步协议与服务器软删除（2026-08-13）
+
+- **服务器是通用消息转发器**（Go，`C:\Android\clipboard-tool\SyncServer`，驱动 modernc.org/sqlite）：任何 `type` 的消息都入库（messages 表）+ 广播给该用户其他设备 + fetchHistory 可回放。协议扩展零转发改动，只在 ws.go 对特殊消息做前置处理。
+- **消息类型**：`clip_text`/`clip_image`/`clip_file`（内容）、`delete {hash}`（彻底删除标记）、`pin {hash,pinned}`（置顶）、`clear {}`（彻底清空标记）。
+- **服务器软删除（用户决定 2026-08-09）**：delete/clear 到达**只落标记消息，不立即物理删除**；内容消息与 media 的物理删除由 7 天 Cleanup 按标记匹配执行；**置顶内容（pins.pinned=1）永不清理**。误删/误清空可在清除前从服务器拉回（恢复手段见下）。
+  - ws.go 特殊处理：`pin` → `UpsertPin`（pins 表 upsert）；`delete` → `DeletePin`（清除该 hash 置顶标记，内容留给 cleanup）。
+  - `messages`/`media` 表加 `hash` 列（内容哈希，delete/pin 消息存 payload.hash）；新增 `pins(user_id, hash, pinned, updated_at)` 表（PK 含 user_id）。
+  - Cleanup（`store.go Cleanup(userID, olderThan)`）按用户遍历（`AllUserIDs`），四步：delete 标记内容删除 → clear 时间点前非置顶内容删除 → 超期消息兜底（置顶除外）→ 无引用超期 media 删除。**所有 SQL 必须带 `user_id`（用户隔离强规则）**。
+  - 部署：`GOOS=linux GOARCH=amd64 go build` 后 scp 到 `/opt/syncserver/syncserver`（**先 `systemctl stop syncserver` 再覆盖**，运行中覆盖会 scp 失败），`systemctl start/restart syncserver`；migrate 幂等（`addColumn` 存在性检查 + pins 表 `CREATE IF NOT EXISTS`）。服务名 `syncserver.service`（-addr 127.0.0.1:8082 -db /opt/syncserver/sync.db）。
+- **内容哈希算法三端一致**：SHA-256 hex 小写；文本 = `SHA256("text\0"+content)`；图片/文件 = `SHA256(原始字节)`。Windows `ComputeSyncHash` / Android `hashForSync` / 服务器 `sha256Hex`（auth.go 已有，接受 string）。
+- **数据恢复流程（实测有效）**：本地数据被误清/误删后——① 服务器删掉测试产生的 `clear` 记录（`DELETE FROM messages WHERE type='clear'`，内容消息还在因为软删除）；② Windows 端设置窗口"手动同步"（`SyncNowAsync` 全量拉取应用）；③ Android 端需重置 `SyncLastSeq=0`（`run-as ... sed -i 's/value="N"/value="0"/' shared_prefs/sync_settings.xml`）后重启 app 触发全量重拉（增量拉取 since=lastSeq 拉不回旧内容）。注意 delete 记录会照常删掉用户彻底删除过的条目（正确行为）。
 
 ## 网络与代理（政务网）
 
@@ -47,6 +63,9 @@
 
 - **构建**：`C:\gradle\gradle-8.6\bin\gradle.bat -p C:\Android\clipboard-tool\Android :app:assembleDebug --offline --no-daemon > <log> 2>&1` 后 `Select-String` 过滤。`-p` 必须显式指定（workdir 参数可能失效）；`--offline` 免政务网 maven 检查、`--no-daemon` 防管道挂起。
 - **安装验证**：`adb install -r app-debug.apk` → `adb shell am start -n com.starry.clipboardtool/.MainActivity` → `uiautomator dump /sdcard/ui.xml` → **pull 到本地用 python 只提取 text/bounds**（禁止 cat 整份 XML）。拉手机 db：`run-as com.starry.clipboardtool cp .../clipboard.db cache/` + `exec-out cat`（二进制安全）。
+- **无线调试（2026-08-13）**：adb 在 `C:\Android\platform-tools\adb.exe`（不在 PATH）。连接流程：手机开发者选项开启无线调试 → 用户提供「IP 地址与端口」+ 配对码 → `adb pair`（首次）+ `adb connect IP:端口`。**端口会随手机状态变化**（息屏/重开无线调试后连接被拒 10061），需用户重新提供。手机可能显示 `0.102:43387` 这类省略前缀的 IP（本机 192.168.0.101 → 手机即 192.168.0.102）。**uiautomator dump 前先 `input keyevent KEYCODE_WAKEUP` + `am start` 确认 app 在前台**，否则 dump 到锁屏/通知栏。
+- **手机 db 拉取**：app 用 journal 模式（有 `clipboard.db-journal`），直接 cp 主文件会拿到损坏副本（`malformed database schema`）。**必须用 python subprocess 调 adb 二进制拉取**（PowerShell `>` 重定向会按文本处理破坏二进制；`run-as ... cat` 输出经 subprocess capture 最稳）。置顶验证也可直接看 UI：长按条目菜单显示"取消置顶"即已置顶。
+- **置顶（2026-08-13 新增）**：`LocalStore` 有 `pinned` 列（存量库 `ALTER TABLE` 迁移，`PRAGMA table_info` 存在性检查）；`setPinned`/`setPinnedByHash`；`clear()` 改为 `DELETE FROM entries WHERE pinned=0` + `cleanupOrphanFiles()`（保留置顶条目及其文件）。长按菜单第一项"置顶/取消置顶"（`AppState.syncService?.setPinned`）。多选批量删除对话框**始终显示"彻底删除"**（2026-08-13 解除文件条目限制：文件也按内容 hash 发 delete，两端算法一致）。
 - **图片命名**：`LocalStore.saveImageFile` 用 `剪贴板_时间戳.png`（同秒重名加 (1)/(2)）；分享/剪贴板 uri 图片优先用 `queryName` 原名（DISPLAY_NAME），无名字才回退时间戳；同步接收 `clip_image`/`clip_file` 用服务器传来的 name。**不要改回 UUID 命名**（列表会显示哈希名，用户明确反对）。
 - **alpha 处理与 Windows 端同构**：`makeThumb` 对透明 PNG 合成白底（`compositeOnWhite`）；`repairTransparentImages` 启动自愈 alpha 全 0 历史图片（Windows 旧版同步的 DIB 位图）。**必须用 `BitmapFactory.Options.inPremultiplied=false` 重新解码后再置 alpha=255**——默认预乘解码时 alpha=0 会把 RGB 一起归零，导致修复后图片变纯色（本次会话踩过）。
 - **Compose 长按菜单**：DropdownMenu 内容 lambda 在菜单关闭动画期间仍会重组，`menuTarget!!` 非空断言会 NPE 崩溃（点"保存到下载目录"即退出）。必须用安全局部变量（`val target = menuTarget; if (target?.id == entry.id) { ... }`），null 时整个菜单不渲染。
@@ -61,6 +80,8 @@
 - **SendKeys/SendInput 注入不触发 RegisterHotKey**；`keybd_event` 注入的按键会经过低级键盘钩子（可模拟 Win+V）。
 - **崩溃排查**：`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='.NET Runtime'} -MaxEvents 5`；Android 用 `adb logcat -d -b crash`（主缓冲会滚动丢栈）。
 - 模拟按键/剪贴板操作前先清空 `data/`（删 db + images），避免脏数据干扰判断。
+- **测试破坏性功能（清空/删除）前必须备份数据库，且备份保留到全部测试结束**（2026-08-13 数据事故教训）：`Copy-Item %LocalAppData%\ClipboardTool\clipboard.db <备份>`，验证完恢复；**不要在恢复验证通过后立刻删备份**——后续测试可能再次清空（本会话 ConfirmDialog 空白 bug 误触发"本机清空"导致 200+ 条用户数据丢失，靠服务器软删除副本才找回）。
+- **主窗口"置顶"是按钮**（MainWindow.xaml 顶部 `Content="置顶"` Click=OnPin），不是右键菜单；Overlay 悬浮列表右键菜单才有"置顶"项。
 - **PowerShell 脚本里 `$pid` 是保留变量**（当前进程 ID），函数参数/局部变量命名会撞 → 用 `$procId`。
 - **UIA 自动化测试（右键菜单等）**：`MainWindowHandle` 不可靠（可能拿到搜狗输入法窗口），按 `ProcessId` 过滤 + `BoundingRectangle` 高度>300 找 overlay；PowerShell 委托闭包内 `$list +=` 不可靠（用 `ArrayList` + `[void]$list.Add()`）；`FindAll` 结果在管道/foreach 中访问 `.Current.Name` 正常但 `Where-Object` 匹配中文会因脚本编码失败（见 Android 节 BOM 规则）。
 
