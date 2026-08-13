@@ -23,7 +23,7 @@
             <DropShadowEffect BlurRadius="28" ShadowDepth="4" Opacity="0.28" Color="#000000"/>
         </Border.Effect>
         <Grid>
-            <Button Content="&#xE8BB;" Style="{StaticResource FluentButtonSecondary}"
+            <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource FluentButtonSecondary}"
                     Width="30" Height="30" Padding="0"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,8,10,0" Click="OnCloseClick"

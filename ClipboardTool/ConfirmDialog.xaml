@@ -24,7 +24,7 @@
         </Border.Effect>
         <Grid>
             <!-- 标题栏拖拽区（WindowChrome CaptionHeight=44 已处理）与关闭按钮 -->
-            <Button Content="&#xE8BB;" Style="{StaticResource FluentButtonSecondary}"
+            <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource FluentButtonSecondary}"
                     Width="30" Height="30" Padding="0"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,8,10,0" Click="OnCloseClick"
