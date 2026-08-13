@@ -105,7 +105,11 @@ public sealed class ClipboardMonitor
                 var png = EncodePng(bmp);
                 var thumb = EncodePng(MakeThumb(bmp, 200));
                 Log.Info($"捕获图片 {bmp.PixelWidth}x{bmp.PixelHeight}，PNG {png.Length / 1024}KB");
-                var path = _store.SaveImageFile(png);
+                // 资源管理器复制图片时剪贴板同时含 FileDrop（真实文件名）与 Bitmap，优先用原名
+                var path = data.GetDataPresent(DataFormats.FileDrop)
+                    && data.GetData(DataFormats.FileDrop) is string[] dropFiles && dropFiles.Length > 0
+                    ? SaveImageWithName(dropFiles[0], png)
+                    : _store.SaveImageFile(png);
                 var entry = new Entry
                 {
                     Type = "image",
@@ -145,6 +149,10 @@ public sealed class ClipboardMonitor
         encoder.Save(ms);
         return ms.ToArray();
     }
+
+    /// <summary>按原始文件名保存图片（资源管理器复制图片时剪贴板同时含 FileDrop，用它拿真实文件名）。</summary>
+    private string SaveImageWithName(string originalPath, byte[] png)
+        => _store.SaveImageFileAs(Path.GetFileName(originalPath), png);
 
     /// <summary>等比缩放到最长边不超过 max，超过才缩放。</summary>
     internal static BitmapSource MakeThumb(BitmapSource src, double max)
