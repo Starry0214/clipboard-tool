@@ -136,6 +136,18 @@ public sealed class ClipboardStore : IDisposable
 
     private static string ComputeHash(Entry e)
     {
+        if (e.Type == "file")
+        {
+            // 文件按内容字节哈希（与同步/服务器一致）：同路径内容变化不误去重，delete/pin 消息也能按内容匹配本地条目
+            try
+            {
+                return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(e.Content)));
+            }
+            catch (Exception)
+            {
+                // 文件不可读（被占用/已删除）时降级为路径哈希，避免捕获崩溃
+            }
+        }
         var sha = SHA256.HashData(e.Type == "image" && e.Image is not null
             ? e.Image
             : Encoding.UTF8.GetBytes(e.Type + "\u0000" + e.Content));

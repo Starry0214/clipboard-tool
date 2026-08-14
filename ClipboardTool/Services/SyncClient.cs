@@ -246,14 +246,14 @@ public sealed class SyncClient : IDisposable
         }
     }
 
-    public async Task SendClipAsync(string text)
+    public async Task<bool> SendClipAsync(string text)
     {
-        await SendAsync(JsonSerializer.Serialize(new { type = "clip_text", payload = new { text } }));
+        return await SendAsync(JsonSerializer.Serialize(new { type = "clip_text", payload = new { text } }));
     }
 
-    public async Task SendClipAsync(string type, long mediaId, string name, long size)
+    public async Task<bool> SendClipAsync(string type, long mediaId, string name, long size)
     {
-        await SendAsync(JsonSerializer.Serialize(new { type, payload = new { mediaId, name, size } }));
+        return await SendAsync(JsonSerializer.Serialize(new { type, payload = new { mediaId, name, size } }));
     }
 
     /// <summary>发送跨端删除（hash 为内容哈希，服务器据此删消息并落 delete 记录）。失败可重试。</summary>

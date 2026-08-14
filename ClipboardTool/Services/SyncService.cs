@@ -189,7 +189,11 @@ public sealed class SyncService : IDisposable
                 switch (entry.Type)
                 {
                     case "text":
-                        await _client.SendClipAsync(entry.Content);
+                        var sent = await _client.SendClipAsync(entry.Content);
+                        if (!sent)
+                            Log.Error($"同步文本发送失败（WS 未连接）: {entry.Content[..Math.Min(entry.Content.Length, 50)]}");
+                        else
+                            Log.Info($"同步文本已发送: {entry.Content.Length} 字符");
                         break;
                     case "image":
                     case "file":
@@ -216,18 +220,35 @@ public sealed class SyncService : IDisposable
         {
             data = await File.ReadAllBytesAsync(entry.Content);
         }
-        for (var attempt = 0; attempt < 3; attempt++)
+        var name = Path.GetFileName(entry.Content);
+        var type = entry.Type == "image" ? "clip_image" : "clip_file";
+        // 指数退避重试：1s/2s/4s/8s/16s，覆盖境外中继时通时断的窗口；每次失败都记录日志便于排查
+        long? mediaId = null;
+        for (var attempt = 0; attempt < 5 && mediaId is null; attempt++)
         {
-            var mediaId = await _client!.UploadMediaAsync(data);
-            if (mediaId is not null)
+            if (attempt > 0)
+                await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
+            mediaId = await _client!.UploadMediaAsync(data);
+            if (mediaId is null)
+                Log.Error($"同步上传媒体失败(第 {attempt + 1} 次): {type} {name} {data.Length} 字节");
+        }
+        if (mediaId is null)
+        {
+            Log.Error($"同步上传媒体最终失败，已放弃: {type} {name} {data.Length} 字节");
+            return;
+        }
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            // 图片/文件都用文件名（可读，避免另一端显示 UUID/哈希名）
+            if (await _client!.SendClipAsync(type, mediaId.Value, name, data.Length))
             {
-                // 图片/文件都用文件名（可读，避免另一端显示 UUID/哈希名）
-                var name = Path.GetFileName(entry.Content);
-                await _client.SendClipAsync(entry.Type == "image" ? "clip_image" : "clip_file", mediaId.Value, name, data.Length);
+                Log.Info($"同步上传成功: {type} {name} {data.Length} 字节, mediaId={mediaId}");
                 return;
             }
+            Log.Error($"同步 clip_file 消息发送失败(第 {attempt + 1} 次): {type} {name}（WS 未连接，媒体已上传）");
             await Task.Delay(TimeSpan.FromSeconds(1 << attempt));
         }
+        Log.Error($"同步 clip_file 消息最终失败，已放弃: {type} {name}（媒体 mediaId={mediaId} 已上传，手动同步可补发）");
     }
 
     private async void OnRemoteMessage(SyncMessage m)
