@@ -275,7 +275,22 @@ internal static class Program
     {
         try
         {
-            // 必须用完整路径：无运行时机器上 PATH 是引导器启动时的旧值，装完运行时后仍解析不到 dotnet
+            // 机器级 + 用户级两处都查：per-user 安装（%LocalAppData%\Microsoft\dotnet）不写 PATH，
+            // 只查 Program Files 会检测不到，导致每次启动都重新触发安装（UAC 反复弹）
+            var roots = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "dotnet"),
+            };
+            foreach (var root in roots)
+            {
+                var sharedDir = Path.Combine(root, "shared", "Microsoft.WindowsDesktop.App");
+                if (Directory.Exists(sharedDir) &&
+                    Directory.GetDirectories(sharedDir).Any(d => Path.GetFileName(d).StartsWith("9.", StringComparison.Ordinal)))
+                    return true;
+            }
+
+            // 兜底：dotnet CLI（自定义安装位置，如开发机 PATH）
             var dotnet = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
             if (!File.Exists(dotnet))
