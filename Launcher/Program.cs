@@ -40,6 +40,7 @@ internal static class Program
     private const uint MB_ICONWARNING = 0x00000030;
     private const uint MB_ICONERROR = 0x00000010;
     private const uint MB_DEFBUTTON1 = 0x00000100;
+    private const uint MB_DEFBUTTON2 = 0x00000200;
     private const int IDYES = 6;
 
     /// <summary>引导器自身版本（与 csproj &lt;Version&gt; 及内嵌主程序版本同步）。</summary>
@@ -140,16 +141,28 @@ internal static class Program
             if (!Version.TryParse(text.Trim().TrimStart('v'), out var latest) || latest <= SelfVersion)
                 return false;
 
-            // 更新前必须提示用户确认，不做静默更新（用户拒绝则本次不更新，正常运行旧版）
+            // 更新前必须提示用户确认，不做静默更新（用户拒绝则本次不更新，正常运行旧版）。
+            // 默认按钮用"否"（暂不更新），回车/快速点击不会误触更新。
             var ask = MessageBoxW(IntPtr.Zero,
                 $"发现新版本 v{latest}，是否立即更新？\n更新过程约需几秒，完成后自动重启。",
-                "剪贴板助手", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON1);
+                "剪贴板助手", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
             if (ask != IDYES)
                 return false;
 
-            // 下载新版引导器
+            // 下载新版引导器（带进度窗口：约 8MB 需下载几秒，无反馈会被误以为卡死/应用消失）
             var newLauncher = Path.Combine(appDir, "launcher.new.exe");
-            DownloadFile("ClipboardTool.exe", newLauncher, null);
+            var dlOk = ProgressWindow.Run("剪贴板助手", "正在下载更新…", reporter =>
+            {
+                DownloadFile("ClipboardTool.exe", newLauncher, (read, total) =>
+                {
+                    if (total > 0)
+                        reporter.Report((int)Math.Min(100, read * 100L / total));
+                });
+                reporter.Stage("正在准备重启…");
+                return true;
+            });
+            if (!dlOk || !File.Exists(newLauncher))
+                return false; // 下载失败/进度窗口被取消：不更新，正常启动旧版
 
             // bat：等本进程退出 → 覆盖自身 → 重启（中文路径用 chcp 65001 + UTF-8）
             var self = Environment.ProcessPath ?? throw new InvalidOperationException("无法确定自身路径");
