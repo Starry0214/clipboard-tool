@@ -20,7 +20,8 @@ public static class FileOpener
                     var full = Path.GetFullPath(path);
                     if (full.StartsWith(dataDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     {
-                        var tmpDir = Path.Combine(Path.GetTempPath(), "ClipboardTool");
+                        // 临时副本放数据目录内（用户要求，与数据同目录便于管理；磁盘清理不会动它）
+                        var tmpDir = Path.Combine(dataDir, "preview_tmp");
                         Directory.CreateDirectory(tmpDir);
                         // 顺手清理 7 天前的旧临时副本，避免堆积
                         try
