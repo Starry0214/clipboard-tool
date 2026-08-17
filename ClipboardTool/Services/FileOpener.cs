@@ -7,7 +7,7 @@ public static class FileOpener
 {
     /// <summary>用系统默认程序打开文件。若文件位于应用数据目录（同步副本/图片文件），先复制到临时目录再打开，
     /// 避免默认程序（如 WPS 打开 PDF 时重存）改写原文件导致内容 hash 变化、跨端删除/置顶失配。</summary>
-    public static void Open(string path)
+    public static void Open(string path, long entryId = 0)
     {
         try
         {
@@ -34,7 +34,9 @@ public static class FileOpener
                             }
                         }
                         catch (Exception) { }
-                        var tmp = Path.Combine(tmpDir, $"{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Path.GetFileName(full)}");
+                        // 副本名带条目 ID（entryId>0 时），删除条目后可按 ID 精确清理
+                        var prefix = entryId > 0 ? entryId + "_" : "";
+                        var tmp = Path.Combine(tmpDir, $"{prefix}{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Path.GetFileName(full)}");
                         File.Copy(full, tmp, overwrite: true);
                         openPath = tmp;
                     }

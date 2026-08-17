@@ -431,9 +431,37 @@ public sealed class ClipboardStore : IDisposable
             if (!full.StartsWith(_dataDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 return;
             File.Delete(full);
+            // 顺带清理该文件对应的预览临时副本（preview_tmp），避免残留
+            CleanupPreviewCopies(Path.GetFileName(full));
         }
         catch (IOException)
         {
+        }
+    }
+
+    /// <summary>清理 preview_tmp 目录中与指定文件同名的预览副本（文件名以 _原文件名 结尾，
+    /// 覆盖带条目 ID 与纯时间戳两种命名）。预览副本是一次性文件，删了下次预览重新生成。</summary>
+    private void CleanupPreviewCopies(string fileName)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(fileName))
+                return;
+            var tmpDir = Path.Combine(_dataDir, "preview_tmp");
+            if (!Directory.Exists(tmpDir))
+                return;
+            foreach (var f in Directory.EnumerateFiles(tmpDir))
+            {
+                if (f.EndsWith("_" + fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(f); }
+                    catch (IOException) { }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 清理失败不影响主流程
         }
     }
 

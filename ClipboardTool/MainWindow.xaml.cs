@@ -40,7 +40,7 @@ public partial class MainWindow : Window
                     (_textPreview ??= new TextPreviewWindow()).ShowText(entry);
                     break;
                 default:
-                    OpenFile(entry.Content);
+                    OpenFile(entry.Content, entry.Id);
                     break;
             }
             Refresh();
@@ -128,7 +128,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>用系统默认程序打开文件（数据目录内副本先复制到临时目录，防 WPS 等默认程序重存改写）。</summary>
-    private static void OpenFile(string path) => FileOpener.Open(path);
+    private static void OpenFile(string path, long entryId = 0) => FileOpener.Open(path, entryId);
 
     private void OnPin(object sender, RoutedEventArgs e)
     {
