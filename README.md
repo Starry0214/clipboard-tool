@@ -14,12 +14,12 @@
 
 ## 技术栈
 
-| 端             | 技术                           |
-| -------------- | ------------------------------ |
-| Windows 主程序 | C# / .NET 9 / WPF              |
+| 端 | 技术 |
+|---|---|
+| Windows 主程序 | C# / .NET 9 / WPF |
 | Windows 引导器 | C# / .NET 9 / NativeAOT 单文件 |
-| Android        | Kotlin / Jetpack Compose       |
-| 同步服务器     | Go / SQLite / WebSocket        |
+| Android | Kotlin / Jetpack Compose |
+| 同步服务器 | Go / SQLite / WebSocket |
 
 ## 目录结构
 
