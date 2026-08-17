@@ -109,6 +109,8 @@ public sealed class ClipboardStore : IDisposable
     public bool Add(Entry e)
     {
         var hash = ComputeHash(e);
+        if (hash is null)
+            return false; // 文件不可读：不建坏条目（不降级路径哈希）
         if (ExistsByHash(hash))
         {
             Touch(hash);
@@ -134,24 +136,28 @@ public sealed class ClipboardStore : IDisposable
         return true;
     }
 
-    private static string ComputeHash(Entry e)
+    /// <summary>内容哈希（跨端去重/删除/置顶的身份依据）。文本=SHA256(type\0content)；
+    /// 图片/文件=SHA256(文件字节)。文件不可读时返回 null，调用方跳过入库——
+    /// 绝不降级为路径哈希（路径哈希会让去重/删除/同步全部失配，本会话曾因此踩坑）。</summary>
+    private static string? ComputeHash(Entry e)
     {
-        if (e.Type == "file")
+        if (e.Type is "file" or "image")
         {
-            // 文件按内容字节哈希（与同步/服务器一致）：同路径内容变化不误去重，delete/pin 消息也能按内容匹配本地条目
+            // 图片优先用内存字节（捕获/同步时已持有），否则读文件字节（图片原图已是文件存储）
+            if (e.Type == "image" && e.Image is not null)
+                return Convert.ToHexString(SHA256.HashData(e.Image));
+            if (string.IsNullOrEmpty(e.Content))
+                return null;
             try
             {
                 return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(e.Content)));
             }
             catch (Exception)
             {
-                // 文件不可读（被占用/已删除）时降级为路径哈希，避免捕获崩溃
+                return null; // 文件不可读（被占用/已删除）：跳过，不建坏条目
             }
         }
-        var sha = SHA256.HashData(e.Type == "image" && e.Image is not null
-            ? e.Image
-            : Encoding.UTF8.GetBytes(e.Type + "\u0000" + e.Content));
-        return Convert.ToHexString(sha);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(e.Type + "\u0000" + e.Content)));
     }
 
     private bool ExistsByHash(string hash)
@@ -226,8 +232,8 @@ public sealed class ClipboardStore : IDisposable
             cmd.Parameters.AddWithValue("$source", source);
         }
         cmd.CommandText = where.Count == 0
-            ? "SELECT id, type, content, thumb, pinned, created_at, source FROM entries ORDER BY pinned DESC, created_at DESC"
-            : $"SELECT id, type, content, thumb, pinned, created_at, source FROM entries WHERE {string.Join(" AND ", where)} ORDER BY pinned DESC, created_at DESC";
+            ? "SELECT id, type, content, hash, thumb, pinned, created_at, source FROM entries ORDER BY pinned DESC, created_at DESC"
+            : $"SELECT id, type, content, hash, thumb, pinned, created_at, source FROM entries WHERE {string.Join(" AND ", where)} ORDER BY pinned DESC, created_at DESC";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -238,6 +244,7 @@ public sealed class ClipboardStore : IDisposable
                 Id = reader.GetInt64(0),
                 Type = entryType,
                 Content = content,
+                Hash = reader.IsDBNull(3) ? "" : reader.GetString(3),
                 // 列表显示截断：超长文本（如整篇文档）会让 WPF 换行测量全文，布局卡死；
                 // 图片/文件条目只显示文件名（完整路径在 Content，预览/打开时用）
                 DisplayContent = entryType switch
@@ -245,10 +252,10 @@ public sealed class ClipboardStore : IDisposable
                     "image" or "file" => Path.GetFileName(content),
                     _ => content.Length > 200 ? content[..200] : content,
                 },
-                Thumb = reader.IsDBNull(3) ? null : (byte[])reader[3],
-                Pinned = reader.GetInt64(4) != 0,
-                CreatedAt = reader.GetInt64(5),
-                Source = reader.IsDBNull(6) ? "local" : reader.GetString(6),
+                Thumb = reader.IsDBNull(4) ? null : (byte[])reader[4],
+                Pinned = reader.GetInt64(5) != 0,
+                CreatedAt = reader.GetInt64(6),
+                Source = reader.IsDBNull(7) ? "local" : reader.GetString(7),
             });
         }
         return list;
@@ -292,7 +299,7 @@ public sealed class ClipboardStore : IDisposable
     public Entry? GetById(long id)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT id, type, content, thumb, image, pinned, created_at, source FROM entries WHERE id = $id";
+        cmd.CommandText = "SELECT id, type, content, hash, thumb, image, pinned, created_at, source FROM entries WHERE id = $id";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
@@ -302,11 +309,12 @@ public sealed class ClipboardStore : IDisposable
             Id = reader.GetInt64(0),
             Type = reader.GetString(1),
             Content = reader.GetString(2),
-            Thumb = reader.IsDBNull(3) ? null : (byte[])reader[3],
-            Image = reader.IsDBNull(4) ? null : (byte[])reader[4],
-            Pinned = reader.GetInt64(5) != 0,
-            CreatedAt = reader.GetInt64(6),
-            Source = reader.IsDBNull(7) ? "local" : reader.GetString(7),
+            Hash = reader.IsDBNull(3) ? "" : reader.GetString(3),
+            Thumb = reader.IsDBNull(4) ? null : (byte[])reader[4],
+            Image = reader.IsDBNull(5) ? null : (byte[])reader[5],
+            Pinned = reader.GetInt64(6) != 0,
+            CreatedAt = reader.GetInt64(7),
+            Source = reader.IsDBNull(8) ? "local" : reader.GetString(8),
         };
         if (entry.Type == "image" && entry.Image is null && !string.IsNullOrEmpty(entry.Content))
         {

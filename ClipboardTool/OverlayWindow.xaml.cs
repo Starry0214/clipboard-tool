@@ -246,18 +246,8 @@ public partial class OverlayWindow : Window
         SourceFilterBtn.ToolTip = $"{state} — 单击切换（全部→手机→本机），右键直接选择";
     }
 
-    /// <summary>用系统默认程序打开文件（文件历史条目的双击行为）。</summary>
-    private static void OpenFile(string path)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
-        }
-        catch (Exception)
-        {
-            // 文件不存在或无法打开时静默忽略
-        }
-    }
+    /// <summary>用系统默认程序打开文件（数据目录内副本先复制到临时目录，防 WPS 等默认程序重存改写）。</summary>
+    private static void OpenFile(string path) => FileOpener.Open(path);
 
     private void Reload()
     {
@@ -451,10 +441,17 @@ public partial class OverlayWindow : Window
         };
         if (dlg.ShowDialog(this) != true)
             return;
+        // “所有文件”过滤下 AddExtension 不生效：用户重命名时删掉后缀会存成无后缀文件，这里自动补回
+        var savePath = dlg.FileName;
+        var defaultExt = full.Type == "text" ? ".txt"
+            : full.Type == "image" ? RealImageExt(full.Content)
+            : Path.GetExtension(full.Content);
+        if (!string.IsNullOrEmpty(defaultExt) && string.IsNullOrEmpty(Path.GetExtension(savePath)))
+            savePath += defaultExt;
         try
         {
             if (full.Type == "text")
-                File.WriteAllText(dlg.FileName, full.Content, new UTF8Encoding(false));
+                File.WriteAllText(savePath, full.Content, new UTF8Encoding(false));
             else
             {
                 if (string.IsNullOrEmpty(full.Content) || !File.Exists(full.Content))
@@ -463,7 +460,7 @@ public partial class OverlayWindow : Window
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-                File.Copy(full.Content, dlg.FileName, overwrite: true);
+                File.Copy(full.Content, savePath, overwrite: true);
             }
         }
         catch (Exception ex)

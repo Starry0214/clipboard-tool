@@ -10,6 +10,8 @@ public sealed record Entry
     public string DisplayContent { get; set; } = "";
     public byte[]? Thumb { get; set; }
     public byte[]? Image { get; set; }
+    /// <summary>内容哈希（入库时计算，跨端删除/置顶的身份依据）。</summary>
+    public string Hash { get; set; } = "";
     public bool Pinned { get; set; }
     public long CreatedAt { get; set; }
     public string Source { get; set; } = "local"; // local | phone（同步来源）

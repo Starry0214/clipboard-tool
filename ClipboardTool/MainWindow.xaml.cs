@@ -127,18 +127,8 @@ public partial class MainWindow : Window
         SourceFilterBtn.ToolTip = $"{state} — 单击切换（全部→手机→本机），右键直接选择";
     }
 
-    /// <summary>用系统默认程序打开文件（文件历史条目的双击行为）。</summary>
-    private static void OpenFile(string path)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
-        }
-        catch (Exception)
-        {
-            // 文件不存在或无法打开时静默忽略
-        }
-    }
+    /// <summary>用系统默认程序打开文件（数据目录内副本先复制到临时目录，防 WPS 等默认程序重存改写）。</summary>
+    private static void OpenFile(string path) => FileOpener.Open(path);
 
     private void OnPin(object sender, RoutedEventArgs e)
     {

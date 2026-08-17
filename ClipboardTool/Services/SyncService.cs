@@ -394,16 +394,33 @@ public sealed class SyncService : IDisposable
         _store.Clear();
     }
 
+    /// <summary>跨端同步身份 = 内容哈希。优先用入库时记录的内容哈希（entry.Hash）——
+    /// 条目文件被外部程序（如 WPS 预览重存）改写后仍与服务器/手机端一致；
+    /// 旧数据若存的是路径降级哈希（sha256(type\0content)，历史版本文件不可读时产生）则识别丢弃，回退按当前内容计算。</summary>
     private string? ComputeSyncHash(Entry entry)
     {
+        if (!string.IsNullOrEmpty(entry.Hash))
+        {
+            if (entry.Type == "text")
+                return entry.Hash.ToLowerInvariant();
+            if (entry.Type is "file" or "image")
+            {
+                var pathFallback = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(entry.Type + "\0" + entry.Content))).ToLowerInvariant();
+                if (!entry.Hash.Equals(pathFallback, StringComparison.OrdinalIgnoreCase))
+                    return entry.Hash.ToLowerInvariant();
+            }
+        }
+        // 回退：按当前内容计算（text 用内容；file/image 读文件字节）
         if (entry.Type == "text")
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("text\0" + entry.Content))).ToLowerInvariant();
         if (entry.Type == "image")
         {
-            var full = _store.GetById(entry.Id); // 列表条目不含原图，需取完整条目
-            if (full?.Image is null)
-                return null;
-            return Convert.ToHexString(SHA256.HashData(full.Image)).ToLowerInvariant();
+            var full = _store.GetById(entry.Id); // 列表条目不含原图，需取完整条目（旧数据 BLOB/文件兜底）
+            if (full?.Image is not null)
+                return Convert.ToHexString(SHA256.HashData(full.Image)).ToLowerInvariant();
+            if (full is not null && !string.IsNullOrEmpty(full.Content) && File.Exists(full.Content))
+                return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(full.Content))).ToLowerInvariant();
+            return null;
         }
         if (entry.Type == "file")
         {
