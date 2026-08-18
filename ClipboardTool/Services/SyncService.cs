@@ -447,11 +447,13 @@ public sealed class SyncService : IDisposable
                 break;
             case "clip_text" when !string.IsNullOrEmpty(m.Text):
             {
+                // 自己发的消息（HTTP 轮询/重连补拉会把本设备历史拉回来）标 source=local，
+                // 否则本机历史会以 phone 身份重复入库（重大 bug：电脑端列表全是"手机"来源）
                 var entry = new Entry
                 {
                     Type = "text",
                     Content = m.Text,
-                    Source = "phone",
+                    Source = m.OriginDeviceId == _settings.SyncDeviceId ? "local" : "phone",
                     CreatedAt = m.Ts > 0 ? m.Ts / 1000 : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), // 服务器 ts 为毫秒，本地库用秒
                 };
                 _store.Add(entry);
@@ -484,7 +486,7 @@ public sealed class SyncService : IDisposable
         {
             Type = type,
             Content = localPath,
-            Source = "phone",
+            Source = m.OriginDeviceId == _settings.SyncDeviceId ? "local" : "phone",
             Image = type == "image" ? bytes : null, // 仅用于内容哈希去重（跨回放同一图片不重复入库）
             Thumb = type == "image" ? MakeThumbBytes(bytes) : null,
             CreatedAt = m.Ts > 0 ? m.Ts / 1000 : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), // 服务器 ts 为毫秒，本地库用秒
