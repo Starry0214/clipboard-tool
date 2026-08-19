@@ -103,6 +103,9 @@ public partial class OverlayWindow : Window
         SearchBox.Text = "";
         FilterAll.IsChecked = true;
         UpdateLayout();
+        // 传入的 items 未按来源筛选过滤；且收起再呼出时 SearchBox/FilterAll 可能已是目标值、
+        // 事件不触发 Reload——这里强制按当前类型+来源筛选重新查询，否则图标显示筛选但列表是全部
+        Reload();
 
         var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point((int)cursor.X, (int)cursor.Y));
         var wa = screen.WorkingArea;
