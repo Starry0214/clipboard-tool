@@ -110,7 +110,7 @@
                                     ToolTip="全部来源 — 单击切换（全部→手机→本机），右键直接选择"
                                     Click="OnSourceFilterCycle" Padding="2,0">
                                 <Button.ContextMenu>
-                                    <ContextMenu Style="{StaticResource FluentContextMenu}" Opened="OnSourceMenuOpened">
+                                    <ContextMenu Style="{StaticResource FluentContextMenu}" Opened="OnSourceMenuOpened" Closed="OnSourceMenuClosed">
                                         <ContextMenu.Resources>
                                             <Style TargetType="MenuItem" BasedOn="{StaticResource FluentMenuItem}"/>
                                             <Style TargetType="Separator" BasedOn="{StaticResource FluentMenuSeparator}"/>

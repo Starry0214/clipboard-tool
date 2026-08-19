@@ -26,6 +26,7 @@ public partial class OverlayWindow : Window
     private readonly RectangleGeometry _clip = new();
     private Storyboard? _anim;
     private bool _hiding;
+    private bool _menuOpen; // 任一右键菜单打开期间抑制"点击外部关闭"，避免点菜单项把窗口收掉
     /// <summary>来源筛选状态：""=全部、"local"=本机、"phone"=手机。</summary>
     private string _sourceFilter = "";
 
@@ -69,8 +70,13 @@ public partial class OverlayWindow : Window
         };
         // 列表重新激活 → 非粘贴操作的"保持打开"状态结束，恢复失焦自动关闭
         Activated += (_, _) => _keepOpenAfterMenu = false;
-        // 点击列表外部区域 → 等效 Esc 关闭
-        _mouseCatcher.OutsideClick += RequestHide;
+        // 点击列表外部区域 → 等效 Esc 关闭（菜单打开期间点击菜单项不算外部点击）
+        _mouseCatcher.OutsideClick += () =>
+        {
+            if (_menuOpen)
+                return;
+            RequestHide();
+        };
     }
 
     private static bool IsInListItem(object source)
@@ -210,6 +216,9 @@ public partial class OverlayWindow : Window
 
     private void OnSourceMenuOpened(object sender, RoutedEventArgs e)
     {
+        // 菜单打开期间暂停失焦关闭（与条目右键菜单一致），否则 150ms 后窗口会自动收起
+        _closeTimer.Stop();
+        _menuOpen = true;
         // 菜单打开（控件已加载）后预选当前状态对应的菜单项（视觉反馈）
         if (SourceMenuAll is not null)
             SourceMenuAll.IsChecked = _sourceFilter == "";
@@ -221,6 +230,7 @@ public partial class OverlayWindow : Window
 
     private void OnSourceMenuSelect(object sender, System.Windows.RoutedEventArgs e)
     {
+        _keepOpenAfterMenu = true; // 非粘贴操作：选择来源筛选后保持列表打开，便于查看筛选结果
         _sourceFilter = sender switch
         {
             System.Windows.Controls.MenuItem { Tag: "local" } => "local",
@@ -229,6 +239,19 @@ public partial class OverlayWindow : Window
         };
         UpdateSourceIcon();
         Reload();
+    }
+
+    private void OnSourceMenuClosed(object sender, RoutedEventArgs e)
+    {
+        _menuOpen = false;
+        // 与条目右键菜单一致：非粘贴操作（选了来源）后保持打开；否则恢复失焦自动关闭
+        if (_keepOpenAfterMenu)
+            return;
+        if (IsVisible && !IsActive)
+        {
+            _closeTimer.Stop();
+            _closeTimer.Start();
+        }
     }
 
     /// <summary>切换图标三态显示并更新悬浮提示（当前状态 + 操作说明）。</summary>
@@ -323,6 +346,7 @@ public partial class OverlayWindow : Window
     {
         // 菜单打开期间暂停失焦关闭，否则菜单会随列表一起消失导致点击无效
         _closeTimer.Stop();
+        _menuOpen = true;
         if (sender is ContextMenu cm && cm.PlacementTarget is FrameworkElement fe
             && fe.DataContext is Entry entry && cm.Items.Count > 0 && cm.Items[0] is MenuItem pin)
             pin.Header = entry.Pinned ? "取消置顶" : "置顶";
@@ -332,6 +356,7 @@ public partial class OverlayWindow : Window
 
     private void OnContextMenuClosed(object sender, RoutedEventArgs e)
     {
+        _menuOpen = false;
         if (_keepOpenAfterMenu)
         {
             // 置顶/删除/预览/另存为 不关闭列表：菜单关闭后不再启动失焦定时器，
