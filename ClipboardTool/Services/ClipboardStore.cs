@@ -150,7 +150,10 @@ public sealed class ClipboardStore : IDisposable
                 return null;
             try
             {
-                return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(e.Content)));
+                // FileShare.ReadWrite：WPS 等以 ReadWrite 访问 + FileShare.Read 独占写打开文件时，
+                // File.ReadAllBytes 的 FileShare.Read 共享声明会冲突导致读失败（2026-08-20 实测）
+                using var fs = new FileStream(e.Content, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return Convert.ToHexString(SHA256.HashData(fs));
             }
             catch (Exception)
             {
@@ -321,7 +324,12 @@ public sealed class ClipboardStore : IDisposable
             try
             {
                 if (File.Exists(entry.Content))
-                    entry.Image = File.ReadAllBytes(entry.Content);
+                {
+                    using var fs = new FileStream(entry.Content, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var ms = new MemoryStream();
+                    fs.CopyTo(ms);
+                    entry.Image = ms.ToArray();
+                }
             }
             catch (IOException)
             {

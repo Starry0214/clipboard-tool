@@ -41,6 +41,24 @@ public sealed class SyncService : IDisposable
     public string AccountName => _settings.SyncUsername;
     public string DeviceName => _settings.SyncDeviceName;
 
+    /// <summary>以 FileShare.ReadWrite 读取文件全部字节：WPS 等以 ReadWrite 访问 + FileShare.Read
+    /// 独占写打开文件时，File.ReadAllBytes 的 FileShare.Read 共享声明会冲突导致读失败（2026-08-20 实测）。</summary>
+    private static byte[] ReadAllBytes(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var ms = new MemoryStream();
+        await fs.CopyToAsync(ms);
+        return ms.ToArray();
+    }
+
     private string BaseUrl
     {
         get
@@ -214,11 +232,11 @@ public sealed class SyncService : IDisposable
         if (entry.Type == "image")
         {
             var full = _store.GetById(entry.Id);
-            data = full?.Image ?? await File.ReadAllBytesAsync(entry.Content);
+            data = full?.Image ?? await ReadAllBytesAsync(entry.Content);
         }
         else
         {
-            data = await File.ReadAllBytesAsync(entry.Content);
+            data = await ReadAllBytesAsync(entry.Content);
         }
         var name = Path.GetFileName(entry.Content);
         var type = entry.Type == "image" ? "clip_image" : "clip_file";
@@ -419,7 +437,7 @@ public sealed class SyncService : IDisposable
             if (full?.Image is not null)
                 return Convert.ToHexString(SHA256.HashData(full.Image)).ToLowerInvariant();
             if (full is not null && !string.IsNullOrEmpty(full.Content) && File.Exists(full.Content))
-                return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(full.Content))).ToLowerInvariant();
+                return Convert.ToHexString(SHA256.HashData(ReadAllBytes(full.Content))).ToLowerInvariant();
             return null;
         }
         if (entry.Type == "file")
@@ -427,7 +445,7 @@ public sealed class SyncService : IDisposable
             // 文件按内容字节哈希（与手机端一致）：服务器 clip_file 消息不带 hash，需本地读文件计算
             if (!File.Exists(entry.Content))
                 return null;
-            return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(entry.Content))).ToLowerInvariant();
+            return Convert.ToHexString(SHA256.HashData(ReadAllBytes(entry.Content))).ToLowerInvariant();
         }
         return null;
     }
@@ -544,7 +562,7 @@ public sealed class SyncService : IDisposable
                 // 已有正常缩略图（存在非全透明 alpha）则跳过；全透明/缺失才重生成
                 if (thumb is not null && ClipboardMonitor.HasAlphaChannel(ClipboardMonitor.DecodePng(thumb)))
                     continue;
-                var bytes = File.ReadAllBytes(content);
+                var bytes = ReadAllBytes(content);
                 var src = ClipboardMonitor.DecodePng(bytes);
                 // 原图 alpha 全 0 → 重写为不透明 PNG，粘贴到其他应用也恢复正常
                 var fixedSrc = ClipboardMonitor.FixUntrustedAlpha(src);

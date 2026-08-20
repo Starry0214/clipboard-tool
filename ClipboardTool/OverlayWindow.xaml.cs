@@ -503,7 +503,7 @@ public partial class OverlayWindow : Window
     {
         try
         {
-            using var fs = File.OpenRead(path);
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             var head = new byte[12];
             if (fs.Read(head, 0, head.Length) < head.Length)
                 return ".png";

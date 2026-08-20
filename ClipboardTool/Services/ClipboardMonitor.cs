@@ -7,7 +7,9 @@ namespace ClipboardTool;
 
 /// <summary>
 /// 事件驱动的剪贴板监听：向隐藏窗口注册 AddClipboardFormatListener，
-/// 收到 WM_CLIPBOARDUPDATE 后按 文本 → 图片 → 文件 优先级捕获。
+/// 收到 WM_CLIPBOARDUPDATE 后按 图片 → 文件 → 文本 优先级捕获。
+/// 文件优先于文本：WPS 等复制文件时会把文件名/路径作为 UnicodeText 一起放入剪贴板，
+/// 若文本优先会把文件误存成文本条目（2026-08-20 实测 WPS 复制 docx 只存了文件名文本）。
 /// </summary>
 public sealed class ClipboardMonitor
 {
@@ -21,7 +23,17 @@ public sealed class ClipboardMonitor
     /// <summary>本地捕获入库成功后触发（同步模块据此上传）。</summary>
     public event Action<Entry>? EntryCaptured;
 
-    public ClipboardMonitor(ClipboardStore store) => _store = store;
+    private readonly System.Windows.Threading.DispatcherTimer _retryTimer;
+    private string? _retryPath;
+    private int _retryCount;
+    private const int MaxFileRetries = 5; // 文件被占用/OneDrive 云占位时最多重试次数
+
+    public ClipboardMonitor(ClipboardStore store)
+    {
+        _store = store;
+        _retryTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        _retryTimer.Tick += (_, _) => RetryFileCapture();
+    }
 
     public bool Paused
     {
@@ -81,19 +93,7 @@ public sealed class ClipboardMonitor
     {
         var data = System.Windows.Clipboard.GetDataObject();
 
-        if (data.GetDataPresent(DataFormats.UnicodeText))
-        {
-            var text = data.GetData(DataFormats.UnicodeText) as string;
-            if (!string.IsNullOrEmpty(text))
-            {
-                var entry = new Entry { Type = "text", Content = text, CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
-                if (_store.Add(entry))
-                    EntryCaptured?.Invoke(entry);
-                Log.Info($"捕获文本 {text.Length} 字符");
-            }
-            return;
-        }
-
+        // 图片优先：资源管理器复制图片时剪贴板同时含 Bitmap 与 FileDrop，按图片保存并保留原名
         if (data.GetDataPresent(DataFormats.Bitmap))
         {
             if (data.GetData(DataFormats.Bitmap) is BitmapSource bmp && bmp.PixelWidth > 0)
@@ -129,16 +129,90 @@ public sealed class ClipboardMonitor
             return;
         }
 
+        // 文件优先于文本：WPS 等复制文件时剪贴板同时含文件名文本与 FileDrop，
+        // 文本优先会把文件误存成文本条目（2026-08-20 实测 WPS 复制 docx 只存了文件名）
         if (data.GetDataPresent(DataFormats.FileDrop))
         {
             if (data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
                 var entry = new Entry { Type = "file", Content = files[0], CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
                 if (_store.Add(entry))
+                {
                     EntryCaptured?.Invoke(entry);
-                Log.Info($"捕获文件 {files[0]}");
+                    Log.Info($"捕获文件 {files[0]}");
+                }
+                else if (File.Exists(files[0]) && !IsFileReadable(files[0]))
+                {
+                    // 文件存在但暂不可读（被占用/OneDrive 云占位）：静默跳过会让用户以为没捕获到，安排重试
+                    Log.Info($"捕获文件暂不可读，安排重试: {files[0]}");
+                    ScheduleFileRetry(files[0]);
+                }
+                else
+                {
+                    Log.Info($"捕获文件已存在（去重移顶）: {files[0]}");
+                }
+            }
+            return;
+        }
+
+        if (data.GetDataPresent(DataFormats.UnicodeText))
+        {
+            var text = data.GetData(DataFormats.UnicodeText) as string;
+            if (!string.IsNullOrEmpty(text))
+            {
+                var entry = new Entry { Type = "text", Content = text, CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+                if (_store.Add(entry))
+                    EntryCaptured?.Invoke(entry);
+                Log.Info($"捕获文本 {text.Length} 字符");
             }
         }
+    }
+
+    private static bool IsFileReadable(string path)
+    {
+        try
+        {
+            // FileShare.ReadWrite：WPS 等以 ReadWrite 访问 + FileShare.Read 独占写打开文件时，
+            // File.OpenRead 的 FileShare.Read 共享声明会与之冲突（实测 WPS 打开的 docx 读不了）
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>文件被占用/云占位时延迟重试捕获（最多 MaxFileRetries 次，每次间隔 1.5s）。</summary>
+    private void ScheduleFileRetry(string path)
+    {
+        _retryPath = path;
+        _retryCount = 0;
+        _retryTimer.Stop();
+        _retryTimer.Start();
+    }
+
+    private void RetryFileCapture()
+    {
+        _retryTimer.Stop();
+        if (_retryPath is null)
+            return;
+        var path = _retryPath;
+        var entry = new Entry { Type = "file", Content = path, CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+        if (_store.Add(entry))
+        {
+            _retryPath = null;
+            EntryCaptured?.Invoke(entry);
+            Log.Info($"捕获文件（重试成功） {path}");
+            return;
+        }
+        if (++_retryCount >= MaxFileRetries)
+        {
+            Log.Info($"捕获文件重试放弃（文件仍不可读）: {path}");
+            _retryPath = null;
+            return;
+        }
+        _retryTimer.Start();
     }
 
     internal static byte[] EncodePng(BitmapSource src)
