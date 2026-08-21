@@ -481,7 +481,10 @@ public sealed class SyncService : IDisposable
                 await ApplyRemoteMedia(m, "image");
                 break;
             case "clip_file" when m.MediaId is not null:
-                await ApplyRemoteMedia(m, "file");
+                // 手机端常把图片按文件发送（分享/保存到相册后复制的是文件而非剪贴板位图），
+                // 收到的是 clip_file 但扩展名是图片：按图片入库并生成缩略图，否则显示在"文件"分类、无预览。
+                // 2026-08-21 实测：手机发 Image_xxx.jpg 作为 clip_file，Windows 误存 file 条目。
+                await ApplyRemoteMedia(m, IsImageName(m.Name) ? "image" : "file");
                 break;
         }
     }
@@ -513,6 +516,15 @@ public sealed class SyncService : IDisposable
         {
             try { File.Delete(localPath); } catch (IOException) { } // 去重未新增时清理残留文件
         }
+    }
+
+    /// <summary>按扩展名判断是否为图片（手机端分享/复制图片常以 clip_file 携带 .jpg/.png 等）。</summary>
+    private static bool IsImageName(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return false;
+        var ext = Path.GetExtension(name).ToLowerInvariant();
+        return ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".tiff" or ".tif";
     }
 
     private static string SanitizeName(string name)
