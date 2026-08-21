@@ -7,7 +7,7 @@
     <PublishAot>true</PublishAot>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AssemblyName>剪贴板助手</AssemblyName>
-    <Version>1.4.10</Version>
+    <Version>1.4.11</Version>
   </PropertyGroup>
 
   <ItemGroup>
